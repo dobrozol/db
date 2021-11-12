@@ -1,0 +1,3 @@
+﻿CREATE QUEUE [pp].[CommanderQueue]
+    WITH ACTIVATION (STATUS = ON, PROCEDURE_NAME = [pp].[usp_CheckCommander], MAX_QUEUE_READERS = 1, EXECUTE AS OWNER);
+

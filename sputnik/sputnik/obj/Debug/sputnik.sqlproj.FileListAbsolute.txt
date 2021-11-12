@@ -1,0 +1,9 @@
+C:\usr\repos\db\sputnik\sputnik\bin\Debug\sputnik.dacpac
+C:\usr\repos\db\sputnik\sputnik\obj\Debug\sputnik.sqlproj.AssemblyReference.cache
+C:\usr\repos\db\sputnik\sputnik\obj\Debug\sputnik.dll
+C:\usr\repos\db\sputnik\sputnik\obj\Debug\sputnik.pdb
+C:\usr\repos\db\sputnik\sputnik\bin\Debug\sputnik.dll
+C:\usr\repos\db\sputnik\sputnik\bin\Debug\sputnik.pdb
+C:\usr\repos\db\sputnik\sputnik\bin\Debug\master.dacpac
+C:\usr\repos\db\sputnik\sputnik\obj\Debug\sputnik.sqlproj.CopyComplete
+C:\usr\repos\db\sputnik\sputnik\bin\Debug\msdb.dacpac

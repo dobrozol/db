@@ -1,0 +1,4 @@
+﻿CREATE MESSAGE TYPE [pp_lse_Request]
+    AUTHORIZATION [dbo]
+    VALIDATION = WELL_FORMED_XML;
+

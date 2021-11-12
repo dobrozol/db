@@ -1,0 +1,3 @@
+﻿CREATE QUEUE [pp].[ProcessorQueue]
+    WITH ACTIVATION (STATUS = ON, PROCEDURE_NAME = [pp].[usp_ExecProcessor], MAX_QUEUE_READERS = 8, EXECUTE AS OWNER);
+

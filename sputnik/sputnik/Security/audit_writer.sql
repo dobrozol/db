@@ -1,0 +1,1 @@
+﻿CREATE ROLE [audit_writer];

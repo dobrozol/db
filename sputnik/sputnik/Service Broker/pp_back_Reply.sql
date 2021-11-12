@@ -1,0 +1,4 @@
+﻿CREATE MESSAGE TYPE [pp_back_Reply]
+    AUTHORIZATION [dbo]
+    VALIDATION = WELL_FORMED_XML;
+

@@ -1,0 +1,272 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <Name>sputnik</Name>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectVersion>4.1</ProjectVersion>
+    <ProjectGuid>{a2fd1ddc-90bf-443b-9017-83302d6dc60c}</ProjectGuid>
+    <DSP>Microsoft.Data.Tools.Schema.Sql.Sql150DatabaseSchemaProvider</DSP>
+    <OutputType>Database</OutputType>
+    <RootPath>
+    </RootPath>
+    <RootNamespace>sputnik</RootNamespace>
+    <AssemblyName>sputnik</AssemblyName>
+    <ModelCollation>1033,CI</ModelCollation>
+    <DefaultFileStructure>BySchemaAndSchemaType</DefaultFileStructure>
+    <DeployToDatabase>True</DeployToDatabase>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetLanguage>CS</TargetLanguage>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <SqlServerVerification>False</SqlServerVerification>
+    <IncludeCompositeObjects>True</IncludeCompositeObjects>
+    <TargetDatabaseSet>True</TargetDatabaseSet>
+    <DefaultCollation>SQL_Latin1_General_CP1_CI_AS</DefaultCollation>
+    <Recovery>SIMPLE</Recovery>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <OutputPath>bin\Release\</OutputPath>
+    <BuildScriptName>$(MSBuildProjectName).sql</BuildScriptName>
+    <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <DefineDebug>false</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <OutputPath>bin\Debug\</OutputPath>
+    <BuildScriptName>$(MSBuildProjectName).sql</BuildScriptName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <DefineDebug>true</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">11.0</VisualStudioVersion>
+    <!-- Default to the v11.0 targets path if the targets file for the current VS version is not found -->
+    <SSDTExists Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\SSDT\Microsoft.Data.Tools.Schema.SqlTasks.targets')">True</SSDTExists>
+    <VisualStudioVersion Condition="'$(SSDTExists)' == ''">11.0</VisualStudioVersion>
+  </PropertyGroup>
+  <Import Condition="'$(SQLDBExtensionsRefPath)' != ''" Project="$(SQLDBExtensionsRefPath)\Microsoft.Data.Tools.Schema.SqlTasks.targets" />
+  <Import Condition="'$(SQLDBExtensionsRefPath)' == ''" Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\SSDT\Microsoft.Data.Tools.Schema.SqlTasks.targets" />
+  <ItemGroup>
+    <Folder Include="Properties" />
+    <Folder Include="lse\" />
+    <Folder Include="lse\Tables\" />
+    <Folder Include="db_maintenance\" />
+    <Folder Include="db_maintenance\Tables\" />
+    <Folder Include="config\" />
+    <Folder Include="config\Tables\" />
+    <Folder Include="backups\" />
+    <Folder Include="backups\Tables\" />
+    <Folder Include="awr\" />
+    <Folder Include="awr\Tables\" />
+    <Folder Include="adt\" />
+    <Folder Include="adt\Tables\" />
+    <Folder Include="info\" />
+    <Folder Include="info\Views\" />
+    <Folder Include="Security\" />
+    <Folder Include="info\Functions\" />
+    <Folder Include="db_maintenance\Functions\" />
+    <Folder Include="dbo\" />
+    <Folder Include="dbo\Stored Procedures\" />
+    <Folder Include="pp\" />
+    <Folder Include="pp\Stored Procedures\" />
+    <Folder Include="lse\Stored Procedures\" />
+    <Folder Include="info\Stored Procedures\" />
+    <Folder Include="db_maintenance\Stored Procedures\" />
+    <Folder Include="config\Stored Procedures\" />
+    <Folder Include="backups\Stored Procedures\" />
+    <Folder Include="awr\Stored Procedures\" />
+    <Folder Include="anz\" />
+    <Folder Include="anz\Stored Procedures\" />
+    <Folder Include="Service Broker\" />
+    <Folder Include="adt\Stored Procedures\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Build Include="lse\Tables\HS.sql" />
+    <Build Include="lse\Tables\SourceConfig.sql" />
+    <Build Include="lse\Tables\TargetConfig.sql" />
+    <Build Include="db_maintenance\Tables\ReindexConf.sql" />
+    <Build Include="db_maintenance\Tables\FreeProcCache.sql" />
+    <Build Include="db_maintenance\Tables\ReindexData.sql" />
+    <Build Include="db_maintenance\Tables\TabList_US.sql" />
+    <Build Include="db_maintenance\Tables\CommandTypes.sql" />
+    <Build Include="db_maintenance\Tables\HS.sql" />
+    <Build Include="db_maintenance\Tables\RecomputeStatsConf.sql" />
+    <Build Include="db_maintenance\Tables\StopLists.sql" />
+    <Build Include="db_maintenance\Tables\mw.sql" />
+    <Build Include="config\Tables\params.sql" />
+    <Build Include="config\Tables\cleanup_hs.sql" />
+    <Build Include="backups\Tables\BackupHistory.sql" />
+    <Build Include="backups\Tables\Config.sql" />
+    <Build Include="backups\Tables\BackConfWeekly.sql" />
+    <Build Include="backups\Tables\BackConf.sql" />
+    <Build Include="awr\Tables\sql_text_collect.sql" />
+    <Build Include="awr\Tables\sql_handle_collect.sql" />
+    <Build Include="awr\Tables\pfc_data.sql" />
+    <Build Include="awr\Tables\pfc_handle.sql" />
+    <Build Include="awr\Tables\blk_handle_collect.sql" />
+    <Build Include="awr\Tables\tempusing.sql" />
+    <Build Include="awr\Tables\pfc_data_dyn.sql" />
+    <Build Include="awr\Tables\pfc_handle_dyn.sql" />
+    <Build Include="adt\Tables\jsecurity.sql" />
+    <Build Include="adt\Tables\jconfigure.sql" />
+    <Build Include="adt\Tables\jlogon.sql" />
+    <Build Include="info\Views\vGetQuickBackConf.sql" />
+    <Build Include="info\Views\vGetAllBackConf.sql" />
+    <Build Include="info\Views\vtempusing_ss.sql" />
+    <Build Include="info\Views\vtempusing_ver.sql" />
+    <Build Include="info\Views\vtempusing.sql" />
+    <Build Include="info\Views\vGetLse.sql" />
+    <Build Include="Security\audit_writer.sql" />
+    <Build Include="info\Functions\uf_CheckFile.sql" />
+    <Build Include="info\Functions\uf_GetWeekDay.sql" />
+    <Build Include="info\Functions\uf_FormatTime.sql" />
+    <Build Include="db_maintenance\Functions\uf_CheckTabList_US.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="info\Functions\uf_GetBackConf.sql" />
+    <Build Include="dbo\Stored Procedures\usp_WriteToFile.sql" />
+    <Build Include="dbo\Stored Procedures\sp_WhoIsActive.sql" />
+    <Build Include="pp\Stored Procedures\usp_ExecProcessorHard.sql" />
+    <Build Include="pp\Stored Procedures\usp_CheckCommander.sql" />
+    <Build Include="pp\Stored Procedures\usp_ExecProcessor.sql" />
+    <Build Include="lse\Stored Procedures\usp_RollForwardRecovery.sql" />
+    <Build Include="lse\Stored Procedures\usp_RunRolling.sql" />
+    <Build Include="lse\Stored Procedures\usp_SetLseConf.sql" />
+    <Build Include="info\Stored Procedures\usp_CheckCatalog.sql" />
+    <Build Include="info\Stored Procedures\usp_GetIP.sql" />
+    <Build Include="info\Stored Procedures\usp_JobMonitor.sql" />
+    <Build Include="info\Stored Procedures\usp_GetHostname.sql" />
+    <Build Include="info\Stored Procedures\usp_GetDrives.sql" />
+    <Build Include="info\Stored Procedures\usp_BackupReport.sql" />
+    <Build Include="info\Stored Procedures\usp_CheckMirror.sql" />
+    <Build Include="info\Stored Procedures\usp_DBSizeReport.sql" />
+    <Build Include="info\Stored Procedures\usp_get_DiskMetr.sql" />
+    <Build Include="info\Stored Procedures\usp_SQLMon.sql" />
+    <Build Include="info\Stored Procedures\sp_who3.sql" />
+    <Build Include="info\Stored Procedures\usp_tempusing_rowver.sql" />
+    <Build Include="info\Stored Procedures\usp_tempusing_internal.sql" />
+    <Build Include="info\Stored Procedures\usp_tempusing_user.sql" />
+    <Build Include="info\Stored Procedures\usp_tempusing_total.sql" />
+    <Build Include="info\Stored Procedures\usp_GetDrives2.sql" />
+    <Build Include="info\Stored Procedures\usp_GetSqlLog.sql" />
+    <Build Include="info\Stored Procedures\usp_GetChainLogs.sql" />
+    <Build Include="info\Stored Procedures\usp_GetLastBackups.sql" />
+    <Build Include="db_maintenance\Stored Procedures\usp_ShrinkDB.sql" />
+    <Build Include="db_maintenance\Stored Procedures\usp_ShrinkLogFile.sql" />
+    <Build Include="db_maintenance\Stored Procedures\usp_FreeProcCache.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="db_maintenance\Stored Procedures\usp_reindex_start.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="db_maintenance\Stored Procedures\usp_RecomputeStats.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="db_maintenance\Stored Procedures\usp_reindex_run.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="db_maintenance\Stored Procedures\usp_reindex_updatestats.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="db_maintenance\Stored Procedures\usp_reindex_preparedata.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="db_maintenance\Stored Procedures\usp_WriteHS.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="config\Stored Procedures\usp_cleanup_hs_run.sql" />
+    <Build Include="backups\Stored Procedures\usp_GC.sql" />
+    <Build Include="backups\Stored Procedures\usp_RM.sql" />
+    <Build Include="backups\Stored Procedures\usp_SetupBackConf.sql" />
+    <Build Include="backups\Stored Procedures\usp_RestoreDB_simple.sql" />
+    <Build Include="backups\Stored Procedures\usp_StartBackup.sql" />
+    <Build Include="backups\Stored Procedures\usp_RunBack.sql" />
+    <Build Include="backups\Stored Procedures\usp_CopyBack.sql" />
+    <Build Include="backups\Stored Procedures\usp_CleaningBack.sql" />
+    <Build Include="backups\Stored Procedures\usp_WriteBackuphistory.sql" />
+    <Build Include="backups\Stored Procedures\usp_RM2.sql" />
+    <Build Include="backups\Stored Procedures\usp_GC2.sql" />
+    <Build Include="awr\Stored Procedures\usp_tempusing_do.sql" />
+    <Build Include="awr\Stored Procedures\usp_pfc_collect.sql" />
+    <Build Include="anz\Stored Procedures\usp_dyn_check.sql" />
+    <Build Include="anz\Stored Procedures\usp_retab_step2.sql" />
+    <Build Include="anz\Stored Procedures\usp_retab_step1.sql" />
+    <Build Include="Service Broker\pp_lse_Contract.sql" />
+    <Build Include="Service Broker\pp_back_Contract.sql" />
+    <Build Include="Service Broker\pp_lse_Request.sql" />
+    <Build Include="Service Broker\pp_lse_Reply.sql" />
+    <Build Include="Service Broker\pp_back_Request.sql" />
+    <Build Include="Service Broker\pp_back_Reply.sql" />
+    <Build Include="Service Broker\ProcessorQueueHard.sql" />
+    <Build Include="Service Broker\CommanderQueue.sql" />
+    <Build Include="Service Broker\ProcessorQueue.sql" />
+    <Build Include="Security\pp.sql" />
+    <Build Include="Security\lse.sql" />
+    <Build Include="Security\info.sql" />
+    <Build Include="Security\db_maintenance.sql" />
+    <Build Include="Security\config.sql" />
+    <Build Include="Security\backups.sql" />
+    <Build Include="Security\awr.sql" />
+    <Build Include="Security\anz.sql" />
+    <Build Include="Security\adt.sql" />
+    <Build Include="Service Broker\pp_ProcessorHard.sql" />
+    <Build Include="Service Broker\pp_Processor.sql" />
+    <Build Include="Service Broker\pp_Commander.sql" />
+    <Build Include="Service Broker\pp_lse_PriorityFromProcessor.sql" />
+    <Build Include="Service Broker\pp_lse_PriorityFromCommander.sql" />
+    <Build Include="Service Broker\pp_back_Priority.sql" />
+    <Build Include="backups\Tables\NoBackupList.sql" />
+    <Build Include="awr\Tables\db_usage_stats.sql" />
+    <Build Include="awr\Tables\db_memory_usage.sql" />
+    <Build Include="awr\Tables\db_cpu_usage.sql" />
+    <Build Include="adt\Tables\instance_hs.sql" />
+    <Build Include="info\Stored Procedures\usp_dbmail_MissingBackups.sql" />
+    <Build Include="info\Stored Procedures\usp_dbmail_FailedJobs.sql" />
+    <Build Include="awr\Stored Procedures\usp_db_usage_collect.sql" />
+    <Build Include="adt\Stored Procedures\usp_mail_newdb.sql" />
+    <Build Include="adt\Stored Procedures\usp_eventnots_processor.sql" />
+    <Build Include="Service Broker\event_notification_q.sql" />
+    <Build Include="Service Broker\service_adt_db_events.sql" />
+    <Build Include="info\Stored Procedures\usp_dbmail_MemoryUse.sql" />
+    <Build Include="info\Stored Procedures\usp_dbmail_DrivesFreeSpace.sql" />
+    <Build Include="adt\Stored Procedures\usp_mail_eventdb.sql" />
+    <Build Include="Security\zabbix.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\130\SqlSchemas\master.dacpac">
+      <HintPath>C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\130\SqlSchemas\master.dacpac</HintPath>
+      <SuppressMissingDependenciesErrors>True</SuppressMissingDependenciesErrors>
+      <DatabaseVariableLiteralValue>master</DatabaseVariableLiteralValue>
+    </ArtifactReference>
+    <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac">
+      <HintPath>C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac</HintPath>
+      <SuppressMissingDependenciesErrors>True</SuppressMissingDependenciesErrors>
+      <DatabaseVariableLiteralValue>tempdb</DatabaseVariableLiteralValue>
+    </ArtifactReference>
+    <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac">
+      <HintPath>C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac</HintPath>
+      <DatabaseSqlCmdVariable>tempdb</DatabaseSqlCmdVariable>
+    </ArtifactReference>
+    <ArtifactReference Include="$(DacPacRootPath)\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SqlSchemas\msdb.dacpac">
+      <HintPath>$(DacPacRootPath)\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SqlSchemas\msdb.dacpac</HintPath>
+      <SuppressMissingDependenciesErrors>True</SuppressMissingDependenciesErrors>
+      <DatabaseVariableLiteralValue>msdb</DatabaseVariableLiteralValue>
+    </ArtifactReference>
+  </ItemGroup>
+  <ItemGroup>
+    <SqlCmdVariable Include="tempdb">
+      <DefaultValue>tempdb</DefaultValue>
+      <Value>$(SqlCmdVar__1)</Value>
+    </SqlCmdVariable>
+  </ItemGroup>
+</Project>
