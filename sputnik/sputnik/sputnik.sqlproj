@@ -241,6 +241,7 @@
     <Build Include="info\Stored Procedures\usp_dbmail_DrivesFreeSpace.sql" />
     <Build Include="adt\Stored Procedures\usp_mail_eventdb.sql" />
     <Build Include="Security\zabbix.sql" />
+    <Build Include="db_maintenance\Stored Procedures\usp_getMaxDop.sql" />
   </ItemGroup>
   <ItemGroup>
     <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\130\SqlSchemas\master.dacpac">

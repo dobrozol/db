@@ -104,27 +104,13 @@
 		SET LOCK_TIMEOUT 30000;
 		SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 
-		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX),@flag_fail bit, @db_id_check int, @obj_id int, @ind_id int, @command_type tinyint, @tsql_handle_log varchar(2000), @commant_text_log Nvarchar(MAX),@AllCores_cnt smallint, @MaxDop_set smallint;
+		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX),@flag_fail bit, @db_id_check int, @obj_id int, @ind_id int, @command_type tinyint, @tsql_handle_log varchar(2000), @commant_text_log Nvarchar(MAX),@AllCores_cnt smallint, @MaxDop_set smallint=@MaxDop;
 		declare @tt_start_usp datetime2(2), @time_elapsed_sec int;
 		declare @tsql_handle nvarchar (2400), @tsql nvarchar (2400), @tsqlcheck nvarchar (800), @StopList_str NVARCHAR(MAX);
 		declare @MirrorState nvarchar(75);
 		set @tt_start_usp=CAST(SYSDATETIME() AS datetime2(2));
 		--Определяем текущую редакцию SQL Server. MaxDop будет работать только в Enterprise:
 		DECLARE @Ed VARCHAR(3)=LEFT(CAST(SERVERPROPERTY('Edition') AS VARCHAR(128)),3);
-		IF @Ed='Ent'
-		BEGIN
-			--Определяем доступное кол-во ядер CPU для SQL Server:
-			select @AllCores_cnt=count(*) from sys.dm_os_schedulers where [status]='VISIBLE ONLINE';
-			--Максимум для MAXDOP = 64 ядра:
-			IF @AllCores_cnt>64
-				set @AllCores_cnt=64;
-			IF @MaxDop is not null
-			BEGIN
-				set @MaxDop_set=@MaxDop;
-				IF @AllCores_cnt<@MaxDop_set
-					set @MaxDop_set=@AllCores_cnt;
-			END
-		END
 
 		IF @TableFilter is not null
 			set @filter_old_hours=0;
@@ -294,31 +280,8 @@
 				if @PauseMirroring=1 and @MirrorState in ('SYNCHRONIZED','SYNCHRONIZING')
 					exec(N'alter database ['+@DB_current+'] set partner suspend');
 
-				--Только если Enterprise: Автоопределение @MaxDop (если не задан) - в зависимости от объема индекса!
-				IF @MaxDop IS NULL AND @Ed='Ent'
-				BEGIN
-					select @MaxDop_set=
-					CASE 
-						WHEN @PageCount<640 THEN 2		--5Мб
-						WHEN @PageCount<6400 THEN 4 	--50Мб
-						WHEN @PageCount<64000 THEN 8	--500Мб
-						WHEN @PageCount<640000 THEN 16	--5Гб
-						WHEN @PageCount<6400000 THEN 32	--50Гб
-						ELSE 64
-					END;
-					--Если ядер CPU мало, то сработает послабление:
-					select @MaxDop_set=
-					CASE 
-						WHEN @AllCores_cnt<=4 AND @MaxDop_set>1 THEN 1
-						WHEN @AllCores_cnt<=9 AND @MaxDop_set>2 THEN 2
-						WHEN @AllCores_cnt<=14 AND @MaxDop_set>3 THEN 3
-						WHEN @AllCores_cnt<=16 AND @MaxDop_set>4 THEN 4
-						WHEN @AllCores_cnt<=20  AND @MaxDop_set>5 THEN 5
-						ELSE @MaxDop_set
-					END;
-					IF @AllCores_cnt<=@MaxDop_set
-						set @MaxDop_set=@AllCores_cnt-1;
-				END;
+				if (isnull(@MaxDop,-1)<0)
+					exec @MaxDop_set = [db_maintenance].[usp_getMaxDop] @PageCount;
 
 				set @check_set_online=@set_online;
 				IF (@check_set_online='ON' and @NotRunOnline=1 and @policy_offline=1)

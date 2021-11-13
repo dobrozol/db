@@ -17,6 +17,8 @@
     [PauseMirroring]   BIT            DEFAULT ((0)) NOT NULL,
     [DeadLck_PR]       SMALLINT       DEFAULT ((0)) NOT NULL,
     [Lck_Timeout]      INT            DEFAULT ((20000)) NOT NULL,
-    [timeout_sec]      INT            NULL
+    [timeout_sec]      INT            NULL,
+    [set_maxdop]       SMALLINT       NULL, --set maxdop for reindex operation
+
 );
 
