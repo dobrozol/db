@@ -19,6 +19,7 @@
     [Lck_Timeout]      INT            DEFAULT ((20000)) NOT NULL,
     [timeout_sec]      INT            NULL,
     [set_maxdop]       SMALLINT       NULL, --set maxdop for reindex operation
-
+    [walp_max_duration]     SMALLINT  NULL, --option WAIT_AT_LOW_PRIORITY parameter MAX_DURATION (in minutes). NULL - parameters will not use
+    [walp_abort_after_wait] VARCHAR(20) DEFAULT ('NONE') --option WAIT_AT_LOW_PRIORITY parameter ABORT_AFTER_WAIT (NONE, SELF, BLOCKERS)
 );
 
