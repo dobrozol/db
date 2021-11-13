@@ -1,5 +1,4 @@
-﻿
-	/* =============================================
+﻿	/* =============================================
 	-- Author:		Андрей Иванов (sqland1c)
 	-- Create date: 24.01.2013 (1.0)
 	-- Description: Процедура для запуска Реиндексации по всем настроенным в таблице ReindexConf базам.
@@ -29,18 +28,20 @@
 					02.12.2016 (2.102) В новой версии поддерживается реиндексация и обновление статистик по нескольким БД.
 					19.07.2017 (2.104) Небольшой ПАТЧ - добавлена возможность использования параметров filter_DataUsedMb_min и filter_DataUsedMb_max
 					в алгоритме запуска Пересчёта статистик распределения.
+					02.12.2017 (2.105) Расширены строковые переменные (БД).
+					14.11.2018 (2.110) Добавлена совместимость с 2008 версией (iif заменены на case).				
 	-- ============================================= */
 	CREATE PROCEDURE db_maintenance.usp_reindex_start
-		@DBFilter nvarchar(300) = null,
+		@DBFilter nvarchar(2000) = null,
 		@StartUpdateStats bit = 0,
-		@TableFilter nvarchar(300) = null,
+		@TableFilter nvarchar(2000) = null,
 		@StartRecomputeStats bit = 0,
 		@only_show bit = 0
 	as
 	begin
 		set nocount on;
 		declare @getdate datetime, @gettime time,  @WeekDay tinyint;
-		declare @DBName nvarchar(500), @RowLimit smallint, @delayperiod char(12), @filter_pages_min int , @filter_pages_max int , @UniqueName_SL nvarchar(200),
+		declare @DBName nvarchar(2000), @RowLimit smallint, @delayperiod char(12), @filter_pages_min int , @filter_pages_max int , @UniqueName_SL nvarchar(200),
 		@filter_fragm_min tinyint, @filter_fragm_max tinyint, @filter_old_hours tinyint, 
 		@fragm_tresh tinyint, @set_fillfactor tinyint, @set_compression char(4), @set_online char(3), @set_sortintempdb char(3), @PauseMirroring bit,
 		@DeadLck_PR smallint, @Lck_Timeout int, @filter_rows_min int, @filter_rows_max int, @filter_perc_min decimal(18,2), @filter_perc_max decimal(18,2),
@@ -61,17 +62,17 @@
 			  and (@getdate <= mw.DateClose OR mw.DateClose IS NULL)
 			  and (
 				(
-					(@gettime >= IIF(mw.TimeOpen<mw.TimeClose,mw.TimeOpen,'00:00:00') OR mw.TimeOpen IS NULL)
+					(@gettime >= case when mw.TimeOpen<mw.TimeClose then mw.TimeOpen else '00:00:00' end OR mw.TimeOpen IS NULL)
 					 and (@gettime <= mw.TimeClose OR mw.TimeClose IS NULL)
 				) 
 				OR	
 				(	(@gettime >= mw.TimeOpen OR mw.TimeOpen IS NULL)
-					and (@gettime <= IIF(mw.TimeOpen<mw.TimeClose,mw.TimeClose,'23:59:59.999') OR mw.TimeClose IS NULL)
+					and (@gettime <= case when mw.TimeOpen<mw.TimeClose then mw.TimeClose else '23:59:59.999' end OR mw.TimeClose IS NULL)
 				)
 			  )
 			  and (CHARINDEX(CAST(@WeekDay as CHAR(1)),mw.WeekDays/*,CAST(@WeekDay as CHAR(1))*/)>0 OR mw.WeekDays IS NULL)
 			  /*and UniqueName IN (select UniqueName_MW from sputnik.db_maintenance.ReindexConf)*/
-		order by IIF(TimeClose<TimeOpen,DATEDIFF(minute, TimeOpen, '23:59:59')+1+DATEDIFF(minute, '00:00:00', TimeClose),DATEDIFF (minute, TimeOpen,TimeClose));
+		order by case when TimeClose<TimeOpen then DATEDIFF(minute, TimeOpen, '23:59:59')+1+DATEDIFF(minute, '00:00:00', TimeClose) else DATEDIFF (minute, TimeOpen,TimeClose) end;
 		--select @mv_Name as MW_Name;
 
 		if @StartRecomputeStats=0

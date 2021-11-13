@@ -1,5 +1,4 @@
-﻿
-	/* =============================================
+﻿	/* =============================================
 	-- Author:		Андрей Иванов (sqland1c)
 	-- Create date: 23.12.2013 (1.0)
 	-- Description: Эта процедура выполняет конкретный бэкап для конкретной базы данных.
@@ -64,13 +63,18 @@
 					15.08.2015 (2.00) Реализована возможность резервного копирования по Файловым Группам!
 
 					31.05.2016 (2.01) Оператор IIF заменён на CASE для нормальной работы на SQL Server версий  < 2012!
+
+					22.12.2017 (2.020) Добавлена защита при формировании пути к бэкапу - в конце каталога должен быть символ "\".
+				
+					29.08.2019 (2.021) Добавлен новый параметр @debug - если он задан, то процедура ничего не делает, просто выводит все команды через PRINT для отладки.
 	-- ============================================= */
-	create PROCEDURE [backups].[usp_RunBack] 
+	CREATE PROCEDURE [backups].[usp_RunBack] 
 		@DBNAME_in nvarchar(300)
 		,@TypeBack varchar(4)
 		,@OnlyFull bit = 0 
 		,@NoStats bit = 0
 		,@ForceCopy bit = 0
+		,@debug bit = 0
 	AS
 	BEGIN
 		set nocount on;
@@ -140,11 +144,13 @@
 		begin
 			-- если каталогов нет, создать их 
 			SET @tcmd='md "' + @LocalDir+'"';
-			EXEC xp_cmdshell @tcmd, no_output
+			if @debug=1 print 'xp_cmdshell '''+@tcmd+'';
+			else	EXEC xp_cmdshell @tcmd, no_output
 			IF @LocalDir<>@NetDir and @NetDir is not null and @NetDir<>''
 			begin
 				SET @tcmd='md "' + @NetDir+'"';
-				EXEC xp_cmdshell @tcmd, no_output
+				if @debug=1 print 'xp_cmdshell '''+@tcmd+'';
+				else	EXEC xp_cmdshell @tcmd, no_output
 				--Установка Расширения файла @Extension в only - будем копировать в NetDir и потом менять на BAK
 				set @Extension = '.ONLY';
 			end
@@ -189,15 +195,18 @@
 			END
 		
 			set @backup_file=@DBName+'_'+@DynTypeBack+'_'+@str_FG_fname+REPLACE(REPLACE(SUBSTRING(CONVERT(NVARCHAR(max),@getdate,126),1,19),'T','_'),':','.');
-			SET @tstr=@LocalDir+@backup_file+@Extension;
+			SET @tstr=@LocalDir+CASE WHEN RIGHT(@LocalDir,1)='\' THEN '' ELSE '\' END+@backup_file+@Extension;
 
 			if @DynTypeBack='Full'
-				EXEC(N'BACKUP DATABASE ['+@DBName+'] '+@str_FG+' TO  DISK = N'''+@tstr+''' WITH FORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM, BUFFERCOUNT=64, MAXTRANSFERSIZE=2097152');
+				if @debug=1 PRINT(N'BACKUP DATABASE ['+@DBName+'] '+@str_FG+' TO  DISK = N'''+@tstr+''' WITH FORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM, BUFFERCOUNT=64, MAXTRANSFERSIZE=2097152');
+				else EXEC(N'BACKUP DATABASE ['+@DBName+'] '+@str_FG+' TO  DISK = N'''+@tstr+''' WITH FORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM, BUFFERCOUNT=64, MAXTRANSFERSIZE=2097152');
 			else if @DynTypeBack='Diff'
-				EXEC(N'BACKUP DATABASE ['+@DBName+'] '+@str_FG+' TO  DISK = N'''+@tstr+''' WITH DIFFERENTIAL,FORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM, BUFFERCOUNT=64, MAXTRANSFERSIZE=2097152');
+				if @debug=1 PRINT(N'BACKUP DATABASE ['+@DBName+'] '+@str_FG+' TO  DISK = N'''+@tstr+''' WITH DIFFERENTIAL,FORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM, BUFFERCOUNT=64, MAXTRANSFERSIZE=2097152');
+				else EXEC(N'BACKUP DATABASE ['+@DBName+'] '+@str_FG+' TO  DISK = N'''+@tstr+''' WITH DIFFERENTIAL,FORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM, BUFFERCOUNT=64, MAXTRANSFERSIZE=2097152');
 			else if @DynTypeBack='Log'
 			begin
-				EXEC(N'BACKUP LOG ['+@DBName+'] TO  DISK = N'''+@tstr+''' WITH NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM');
+				if @debug=1 PRINT(N'BACKUP LOG ['+@DBName+'] TO  DISK = N'''+@tstr+''' WITH NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM');
+				else EXEC(N'BACKUP LOG ['+@DBName+'] TO  DISK = N'''+@tstr+''' WITH NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD'+@Compression+@StrStats+', CHECKSUM');
 				/*	Теперь не нужно здесь сжимать файлы ЖТ! Работает механизм авто-сжатия файлов БД из программы Хьюстон!
 					Закомментировано. Оставлено на всякий случай.
 					--if datepart(hh,@getdate)=23		--выполнить сжатие файлов LOG с 23 до 00.
@@ -210,7 +219,7 @@
 				*/
 			end
 			begin try
-				exec backups.usp_WriteBackuphistory @DBName, @FG, @DynTypeBack,@backup_file,@tstr
+				if @debug=0 exec backups.usp_WriteBackuphistory @DBName, @FG, @DynTypeBack,@backup_file,@tstr
 			end try
 			begin catch
 				RAISERROR('Ошибка при записи в таблицу История резервных копий через процедуру usp_WriteBackuphistory !',11,1) WITH LOG
@@ -218,6 +227,6 @@
 
 			--Если задан параметр @ForceCopy то нужно сразу же произвести КОПИРОВАНИЕ сделанного бэкапа через новый модуль!
 			IF @ForceCopy=1
-				exec backups.usp_CopyBack @DBFilter=@DBName,@type=@DynTypeBack,@DateStart=@getdate;			
+				if @debug=0 exec backups.usp_CopyBack @DBFilter=@DBName,@type=@DynTypeBack,@DateStart=@getdate;			
 		end
 	END

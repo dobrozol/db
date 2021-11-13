@@ -1,5 +1,4 @@
-﻿
-	/* =============================================
+﻿	/* =============================================
 	-- Author:		Андрей Иванов (sqland1c)
 	-- Create date: 24.01.2013 (1.0)
 	-- Description: Процедура для выполнения интелектуальной реиндексации в уканной базе на основе собранной статистики 
@@ -71,6 +70,8 @@
 					Добавлена возможность принудительного перестроения (Rebuild) всех индексов. Для этого нужно в параметре @fragm_tresh задать отрицательное значение (например, -1).
 					29.12.2017 (3.006)
 					Увеличины размеры строковых переменных.
+					14.11.2018 (3.010)
+					Добавлена совместимость с 2008 (iif заменены на case).
 	-- ============================================= */
 	CREATE PROCEDURE [db_maintenance].[usp_reindex_run]
 		@db_name nvarchar(2000)=NULL,
@@ -202,9 +203,9 @@
 					,CAST( 
 							([AVG_Fragm_percent])
 							+ (100-[~PageUsed_perc])
-							+ (cast([PageCount] as numeric(19,6)) / IIF(MAX ([PageCount]) over ()=0,1,MAX ([PageCount]) over ()) * 10)
+							+ (cast([PageCount] as numeric(19,6)) / case when MAX ([PageCount]) over ()=0 then 1 else MAX ([PageCount]) over () end * 10)
 							+ (datediff(day,LastRunDate,[LastUpdateStats])*[AVG_Fragm_percent]*0.01) 
-							- (cast([ReindexCount] as numeric(19,6)) / IIF(MAX (ReindexCount) over ()=0,1,MAX (ReindexCount) over ()) * 10)
+							- (cast([ReindexCount] as numeric(19,6)) / case when MAX (ReindexCount) over ()=0 then 1 else MAX (ReindexCount) over () end * 10)
 							as numeric(19,6)) as qt,
 					[TableID] as obj_id, [IndexID] as ind_id,
 					[~PageUsed_perc] as PageU_prc

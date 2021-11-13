@@ -1,5 +1,4 @@
-﻿
-	/* =============================================
+﻿	/* =============================================
 	-- Author:		Андрей Иванов (sqland1c)
 	-- Create date: 01.03.2015 (1.0)
 	-- Description: Процедура для Интеллектуального пересчета статистик распределения (UPDATE STATISTICS) 
@@ -46,6 +45,12 @@
 					29.12.2017	(2.147)
 					Увеличен размер для всех строковых переменных.
 					Небольшое изменение алгоритма выбора имени БД - чтобы в обработку попадали БД с кириллицей в названии.
+				
+					14.11.2018 	(2.160)
+					Добавлена совместимость с 2008 (iif заменены на case).
+
+					08.02.2019	(2.165)
+					Изменены условия отбора. Теперь будут попадать статистики с незаполненными (NULL) значениями.
 	-- ============================================= */
 	CREATE PROCEDURE db_maintenance.usp_RecomputeStats
 		@DBName nvarchar(2000)=NULL,
@@ -138,7 +143,7 @@
 			SELECT TOP ('+CONVERT(NVARCHAR(10),@RowLimit)+N')
 					CAST(DB_NAME() AS NVARCHAR(2000)) as [db], SCHEMA_NAME(objs.schema_id) as shm, objs.name as obj, stat.name as stat, objs.object_id as obj_id, stat.stats_id as stat_id,
 					CAST(sp.last_updated as datetime2(2)) as last_upd, sp.modification_counter as mod_count,
-					CAST(100 * CAST([sp].[modification_counter] AS DECIMAL(18,2)) / CAST(IIF([sp].[rows]=0,1,[sp].[rows]) AS DECIMAL(18,2)) AS DECIMAL(18,2)) AS [perc_change], prts.rows as row_count, prts.DataUsed_Mb
+					CAST(100 * CAST([sp].[modification_counter] AS DECIMAL(18,2)) / CAST(case when [sp].[rows]=0 then 1 else [sp].[rows] end AS DECIMAL(18,2)) AS DECIMAL(18,2)) AS [perc_change], prts.rows as row_count, prts.DataUsed_Mb
 			FROM sys.stats stat
 			INNER JOIN sys.objects objs ON stat.object_id=objs.object_id
 			INNER JOIN 
@@ -155,12 +160,12 @@
 			CROSS APPLY sys.dm_db_stats_properties(stat.object_id, stat.stats_id) AS sp
 			WHERE 
 				(
-					(CAST(100 * CAST([sp].[modification_counter] AS DECIMAL(18,2)) / CAST(IIF([sp].[rows]=0,1,[sp].[rows]) AS DECIMAL(18,2)) AS DECIMAL(18,2)) >= '+CONVERT(VARCHAR(18),@filter_perc_min)+'
-					AND ('+COALESCE(CONVERT(VARCHAR(20),@filter_perc_max),'NULL')+' IS NULL OR CAST(100 * CAST([sp].[modification_counter] AS DECIMAL(18,2)) / CAST(IIF([sp].[rows]=0,1,[sp].[rows]) AS DECIMAL(18,2)) AS DECIMAL(18,2)) <= '+COALESCE(CONVERT(VARCHAR(20),@filter_perc_max),'NULL')+'))
-					OR [sp].[modification_counter]>'+COALESCE(CONVERT(VARCHAR(30),@ModCntr_max),'1000000')+'
+					(CAST(100 * CAST([sp].[modification_counter] AS DECIMAL(18,2)) / CAST(case when [sp].[rows]=0 then 1 else [sp].[rows] end AS DECIMAL(18,2)) AS DECIMAL(18,2)) >= '+CONVERT(VARCHAR(18),@filter_perc_min)+'
+					AND ('+COALESCE(CONVERT(VARCHAR(20),@filter_perc_max),'NULL')+' IS NULL OR CAST(100 * CAST([sp].[modification_counter] AS DECIMAL(18,2)) / CAST(case when [sp].[rows]=0 then 1 else [sp].[rows] end AS DECIMAL(18,2)) AS DECIMAL(18,2)) <= '+COALESCE(CONVERT(VARCHAR(20),@filter_perc_max),'NULL')+'))
+					OR [sp].[modification_counter]>'+COALESCE(CONVERT(VARCHAR(30),@ModCntr_max),'1000000')+' OR [sp].[modification_counter] is null
 				)
-				AND [sp].[modification_counter]>'+COALESCE(CONVERT(VARCHAR(30),@ModCntr_min),'10')+'
-				AND last_updated<DATEADD(HOUR,-'+CONVERT(VARCHAR(5),@filter_old_hours)+',getdate())
+				AND ([sp].[modification_counter]>'+COALESCE(CONVERT(VARCHAR(30),@ModCntr_min),'10')+' OR [sp].[modification_counter] is null)
+				AND (last_updated<DATEADD(HOUR,-'+CONVERT(VARCHAR(5),@filter_old_hours)+',getdate()) or last_updated is NULL)
 				AND ('+COALESCE(CONVERT(VARCHAR(20),@filter_rows_min),'NULL')+' IS NULL OR prts.rows>='+COALESCE(CONVERT(VARCHAR(20),@filter_rows_min),'NULL')+')
 				AND ('+COALESCE(CONVERT(VARCHAR(20),@filter_rows_max),'NULL')+' IS NULL OR prts.rows<='+COALESCE(CONVERT(VARCHAR(20),@filter_rows_max),'NULL')+')
 				AND ('+COALESCE(CONVERT(VARCHAR(20),@filter_DataUsedMb_min),'NULL')+' IS NULL OR prts.DataUsed_Mb>='+COALESCE(CONVERT(VARCHAR(20),@filter_DataUsedMb_min),'NULL')+')
@@ -195,7 +200,7 @@
 					COUNT_BIG(*) over (partition by [db], [shm]) as cnt,
 					SUM(mod_count)  over (partition by [db], [shm]) as sum_mod_cnt,
 					SUM(row_count)  over (partition by [db], [shm]) as sum_row_count,
-					CAST(100 * CAST(SUM(mod_count)  over (partition by [db], [shm]) AS DECIMAL(19,0)) / CAST(IIF(SUM(row_count)  over (partition by [db], [shm])=0,1,SUM(row_count)  over (partition by [db], [shm])) AS DECIMAL(19,0)) AS DECIMAL(19,0)) AS [perc_change],
+					CAST(100 * CAST(SUM(mod_count)  over (partition by [db], [shm]) AS DECIMAL(19,0)) / CAST( case when SUM(row_count)  over (partition by [db], [shm])=0 then 1 else SUM(row_count)  over (partition by [db], [shm]) end AS DECIMAL(19,0)) AS DECIMAL(19,0)) AS [perc_change],
 					SUM(DataUsed_Mb)  over (partition by [db], [shm]) as sum_DataUsed_Mb,
 					MIN(last_upd) over  (partition by [db], [shm]) as old_upd
 				FROM #T_ST
@@ -209,7 +214,7 @@
 					COUNT_BIG(*) over () as cnt,
 					SUM(mod_count)  over () as sum_mod_cnt,
 					SUM(row_count)  over () as sum_row_count,
-					CAST(100 * CAST(SUM(mod_count)  over () AS DECIMAL(19,0)) / CAST(IIF(SUM(row_count)  over ()=0,1,SUM(row_count)  over ()) AS DECIMAL(19,0)) AS DECIMAL(19,0)) AS [perc_change],
+					CAST(100 * CAST(SUM(mod_count)  over () AS DECIMAL(19,0)) / CAST(case when SUM(row_count)  over ()=0 then 1 else SUM(row_count)  over () end AS DECIMAL(19,0)) AS DECIMAL(19,0)) AS [perc_change],
 					SUM(DataUsed_Mb)  over () as sum_DataUsed_Mb,
 					MIN(last_upd) over () as old_upd
 				FROM #T_ST
