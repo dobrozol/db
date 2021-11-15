@@ -46,7 +46,7 @@
 		@filter_fragm_min tinyint, @filter_fragm_max tinyint, @filter_old_hours tinyint, 
 		@fragm_tresh tinyint, @set_fillfactor tinyint, @set_compression char(4), @set_online char(3), @set_sortintempdb char(3), @PauseMirroring bit,
 		@DeadLck_PR smallint, @Lck_Timeout int, @filter_rows_min int, @filter_rows_max int, @filter_perc_min decimal(18,2), @filter_perc_max decimal(18,2),
-		@policy_scan varchar(100), @timeout_sec int, @set_maxdop smallint;
+		@policy_scan varchar(100), @timeout_sec int, @set_maxdop smallint, @walp_max_duration smallint, @walp_abort_after_wait varchar(20);
 		declare @mv_Name nvarchar(200);
 		declare @filter_DataUsedMb_min numeric(9,1), @filter_DataUsedMb_max numeric(9,1);
 		set @getdate=GETDATE();
@@ -105,6 +105,8 @@
 							,[Lck_Timeout]
 							,[timeout_sec]
 							,[set_maxdop]
+							,[walp_max_duration]
+							,[walp_abort_after_wait]
 					from sputnik.db_maintenance.ReindexConf
 					where
 						(@DBFilter is null or DBName=@DBFilter)
@@ -171,7 +173,7 @@
 			fetch next from INDEXs
 				into @DBName, @UniqueName_SL, @RowLimit, @delayperiod, @filter_pages_min, @filter_pages_max, @filter_fragm_min, @filter_fragm_max,
 					@filter_old_hours, @fragm_tresh, @set_fillfactor, @set_compression, @set_online, @set_sortintempdb, @PauseMirroring, @DeadLck_PR,
-					@Lck_Timeout,@timeout_sec, @set_maxdop;
+					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait;
 			while @@FETCH_STATUS=0
 			begin
 				if @StartUpdateStats=0
@@ -218,7 +220,7 @@
 				fetch next from INDEXs
 				into @DBName, @UniqueName_SL, @RowLimit, @delayperiod, @filter_pages_min, @filter_pages_max, @filter_fragm_min, @filter_fragm_max,
 					@filter_old_hours, @fragm_tresh, @set_fillfactor, @set_compression, @set_online, @set_sortintempdb, @PauseMirroring, @DeadLck_PR,
-					@Lck_Timeout,@timeout_sec;
+					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait;
 			end;
 			CLOSE INDEXs;
 			DEALLOCATE INDEXs;

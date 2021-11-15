@@ -96,7 +96,9 @@
 		@PageUsed_tresh tinyint = 80,	--% заполнения страницы, если меньше этого значения то обязательно нужен REBUILD, а не reorganize.
 		@MaxDop smallint = NULL,		--кол-во ядер CPU на которых будет выполнятся обслуживание индекса (Работает только в Enterprise!).
 		@timeout_sec int = NULL,		--Ограничение времени выполнения в данной процедуре в сек. Если NULL (или 0) - бесконечно.
-		@policy_offline tinyint = 2		--Определяет что делать, если Online Rebuild невозможен: 0-Rebuild Offline,1-пропустить,2-Reorganize.
+		@policy_offline tinyint = 2,		--Определяет что делать, если Online Rebuild невозможен: 0-Rebuild Offline,1-пропустить,2-Reorganize.
+		@walp_max_duration smallint = NULL,	--option WAIT_AT_LOW_PRIORITY parameter MAX_DURATION (in minutes). NULL - this option will not use
+		@walp_abort_after_wait varchar(20) = 'NONE' --option WAIT_AT_LOW_PRIORITY parameter ABORT_AFTER_WAIT (NONE, SELF, BLOCKERS)
 	AS
 	BEGIN
 		SET NOCOUNT ON;
@@ -106,7 +108,7 @@
 
 		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX),@flag_fail bit, @db_id_check int, @obj_id int, @ind_id int, @command_type tinyint, @tsql_handle_log varchar(2000), @commant_text_log Nvarchar(MAX),@AllCores_cnt smallint, @MaxDop_set smallint=@MaxDop;
 		declare @tt_start_usp datetime2(2), @time_elapsed_sec int;
-		declare @tsql_handle nvarchar (2400), @tsql nvarchar (2400), @tsqlcheck nvarchar (800), @StopList_str NVARCHAR(MAX);
+		declare @tsql_handle nvarchar (2400), @tsql nvarchar (2400), @tsqlcheck nvarchar (800), @StopList_str NVARCHAR(MAX), @walp_option varchar(300)='';
 		declare @MirrorState nvarchar(75);
 		set @tt_start_usp=CAST(SYSDATETIME() AS datetime2(2));
 		--Определяем текущую редакцию SQL Server. MaxDop будет работать только в Enterprise:
@@ -305,11 +307,14 @@
 					end
 					else if @AVG_Fragm_percent > @fragm_tresh OR (@PageU_prc<@PageUsed_tresh and @AVG_Fragm_percent>0)
 					begin
-						if @check_set_online='ON'
+						if @check_set_online='ON' begin
 							set @command_type=1;
+							if isnull(@walp_max_duration,-1)>0
+								set @walp_option=' (WAIT_AT_LOW_PRIORITY (MAX_DURATION = '+cast(@walp_max_duration as varchar(5))+' minutes, ABORT_AFTER_WAIT = '+@walp_abort_after_wait+'))'
+						end
 						else
 							set @command_type=0;
-						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' rebuild with ( sort_in_tempdb = '+@set_sortintempdb+', online = '+@check_set_online+N' , data_compression = '+@set_compression+', fillfactor='+cast(@set_fillfactor as varchar(5))+CASE WHEN @Ed='Ent' THEN ', MAXDOP = '+cast(@MaxDop_set as varchar(5)) ELSE '' END+')';
+						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' rebuild with ( sort_in_tempdb = '+@set_sortintempdb+', online = '+@check_set_online+@walp_option+N' , data_compression = '+@set_compression+', fillfactor='+cast(@set_fillfactor as varchar(5))+CASE WHEN @Ed='Ent' THEN ', MAXDOP = '+cast(@MaxDop_set as varchar(5)) ELSE '' END+')';
 
 					end
 					set @tsql=@tsql_handle+N'
