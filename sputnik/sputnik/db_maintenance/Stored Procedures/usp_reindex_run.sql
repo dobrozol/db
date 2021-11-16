@@ -72,6 +72,9 @@
 					Увеличины размеры строковых переменных.
 					14.11.2018 (3.010)
 					Добавлена совместимость с 2008 (iif заменены на case).
+					16.11.2021 (3.020) 
+					added NoReorganize parameter (if page-level locks are disabled in the index).
+					reorganize will be replaced with a rebuild index
 	-- ============================================= */
 	CREATE PROCEDURE [db_maintenance].[usp_reindex_run]
 		@db_name nvarchar(2000)=NULL,
@@ -133,12 +136,12 @@
 		set @tsql_handle_log='--dlck_pr='+CAST(@DeadLck_PR as varchar(2))+';tr_iso_lvl=1;lck_tmt='+CAST(@Lck_Timeout as varchar(12))+';
 		';
 		--Далее получаем индексы для обслуживания и формируем команды для обслуживания, и выполняем их по очереди в отдельном пакете.
-		declare @SchemaName nvarchar(2000), @TableName nvarchar(2000), @IndexName nvarchar(2000), @PageCount int, @AVG_Fragm_percent tinyint,@NotRunOnline bit;
+		declare @SchemaName nvarchar(2000), @TableName nvarchar(2000), @IndexName nvarchar(2000), @PageCount int, @AVG_Fragm_percent tinyint,@NotRunOnline bit, @NoReorganize bit;
 		declare @command nvarchar(MAX), @check_set_online char(3), @PageU_prc tinyint, @i_cnt bigint=0,@i_cnt_skip bigint=0;
 		--declare @T_i table (SchemaName nvarchar(300),TableName nvarchar(300),IndexName nvarchar(300), obj_id int, ind_id int, [PageCount] bigint,AVG_Fragm_percent tinyint,PageU_prc tinyint,NotRunOnline bit);
 		IF OBJECT_ID('tempdb.dbo.#T_RI') IS NOT NULL
 			DROP TABLE #T_RI;
-		CREATE TABLE #T_RI (DB nvarchar(2000),SchemaName nvarchar(2000),TableName nvarchar(2000),IndexName nvarchar(2000), obj_id int, ind_id int, [PageCount] bigint,AVG_Fragm_percent tinyint,PageU_prc tinyint,NotRunOnline bit, qt numeric(19,6));
+		CREATE TABLE #T_RI (DB nvarchar(2000),SchemaName nvarchar(2000),TableName nvarchar(2000),IndexName nvarchar(2000), obj_id int, ind_id int, [PageCount] bigint,AVG_Fragm_percent tinyint,PageU_prc tinyint,NotRunOnline bit, qt numeric(19,6), NoReorganize bit);
 
 
 		/*	Отбор БД для обслуживания */
@@ -196,7 +199,8 @@
 							- (cast([ReindexCount] as numeric(19,6)) / case when MAX (ReindexCount) over ()=0 then 1 else MAX (ReindexCount) over () end * 10)
 							as numeric(19,6)) as qt,
 					[TableID] as obj_id, [IndexID] as ind_id,
-					[~PageUsed_perc] as PageU_prc
+					[~PageUsed_perc] as PageU_prc,
+					[NoReorganize]
 				from 
 					[db_maintenance].[ReindexData]
 				where 
@@ -217,9 +221,9 @@
 					and (LastRunDate is null or (LastUpdateStats > LastRunDate) or @fragm_tresh<0)
 				order by qt desc
 			)
-			insert into #T_RI (DB, SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt)
+			insert into #T_RI (DB, SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt,[NoReorganize])
 			select
-					@DB_current,SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt
+					@DB_current,SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt,[NoReorganize]
 			from 
 				cte_src_1;
 		
@@ -236,20 +240,20 @@
 		) ;
 
 		if @only_show=1
-			select SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline 
+			select SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline,[NoReorganize]
 			from
-			(select  top (@rowlimit) SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline from #T_RI order by [qt] desc) t
+			(select  top (@rowlimit) SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline,[NoReorganize] from #T_RI order by [qt] desc) t
 			order by NEWID();
 		else
 		BEGIN
 
 			declare C cursor for
-			select DB, SchemaName,TableName,IndexName, obj_id, ind_id ,[PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline
+			select DB, SchemaName,TableName,IndexName, obj_id, ind_id ,[PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,[NoReorganize]
 			from
-			(select  top (@rowlimit) DB, SchemaName,TableName,IndexName, obj_id, ind_id,  [PageCount],AVG_Fragm_percent, PageU_prc, NotRunOnline from #T_RI order by [qt] desc) t
+			(select  top (@rowlimit) DB, SchemaName,TableName,IndexName, obj_id, ind_id,  [PageCount],AVG_Fragm_percent, PageU_prc, NotRunOnline,[NoReorganize] from #T_RI order by [qt] desc) t
 			order by NEWID();
 			open C
-			fetch next from C into @DB_current, @SchemaName,  @TableName, @IndexName, @obj_id, @ind_id, @PageCount, @AVG_Fragm_percent,@PageU_prc,@NotRunOnline;
+			fetch next from C into @DB_current, @SchemaName,  @TableName, @IndexName, @obj_id, @ind_id, @PageCount, @AVG_Fragm_percent,@PageU_prc,@NotRunOnline,@NoReorganize;
 			while @@fetch_status=0
 			begin
 				--Проверяем TimeOut, если время вышло - пишем в лог HS и выходим!
@@ -300,7 +304,10 @@
 						
 					--rebuild делаем только если фрагментация меньше @fragm_tresh и если заполненость страницы более чем @PageUsed_tresh
 					--в остальных случаях нужен reorginize!
-					if (@AVG_Fragm_percent <= @fragm_tresh AND (@PageU_prc>=@PageUsed_tresh)) OR (@NotRunOnline=1 AND @check_set_online='ON' AND @policy_offline=2)
+					if (
+						(@AVG_Fragm_percent <= @fragm_tresh AND (@PageU_prc>=@PageUsed_tresh)) 
+						OR (@NotRunOnline=1 AND @check_set_online='ON' AND @policy_offline=2)
+					) and isnull(@NoReorganize,0)=0
 					begin
 						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' reorganize ';
 						set @command_type=2;
@@ -364,7 +371,7 @@
 					@tt_start=@tt_start,
 					@Status=@flag_fail, --0-Success, 1-Fail(Error)
 					@Error_Text_1000=@StrErr;
-				fetch next from C into @DB_current, @SchemaName,  @TableName, @IndexName, @obj_id, @ind_id, @PageCount, @AVG_Fragm_percent,@PageU_prc,@NotRunOnline;
+				fetch next from C into @DB_current, @SchemaName,  @TableName, @IndexName, @obj_id, @ind_id, @PageCount, @AVG_Fragm_percent,@PageU_prc,@NotRunOnline,@NoReorganize;
 			
 			end
 			close C;

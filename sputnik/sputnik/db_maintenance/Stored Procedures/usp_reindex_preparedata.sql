@@ -26,6 +26,7 @@
 				Такде добавлено условие, чтобы удалять строки только по текущей БД - этим исправлена существенная ошибка!
 				14.12.2016 (2.030)
 				Изменена таблица ReindexData и добавлен алгоритм логгирования в таблицу HS.
+				16.11.2021 (2.040) added NoReorganize parameter - if page-level locks are disabled in the index
 -- ============================================= */
 CREATE PROCEDURE db_maintenance.usp_reindex_preparedata
 	@db_name nvarchar(300)
@@ -41,42 +42,10 @@ BEGIN
 	if @db_name_check is null
 		return -1;
 	declare @tsql Nvarchar(2400);
-	--Подготовка таблицы ReindexData - если её нет, создадим!
-	if object_id('sputnik.db_maintenance.ReindexData') IS NULL
-		create table db_maintenance.ReindexData
-		(
-			DBName     nvarchar(300),
-			SchemaName nvarchar(300),
-			TableName  nvarchar(300),
-			IndexName  nvarchar(300),
-			TableID    int,
-			IndexID	   int,
-			IndexType  tinyint,
-			SetFillFactor tinyint,
-			TableCreateDate datetime2(2),
-			TableModifyDate datetime2(2),
-			PrepareDate datetime2(2),
-			[PageCount]  bigint,
-			AVG_Fragm_percent tinyint,
-			[~PageUsed_perc] tinyint,
-			[~Row_cnt] bigint,
-			[~RowSize_Kb] numeric(9,3),
-			LastUpdateStats datetime2(2),
-			LastCommand nvarchar(500),
-			LastRunDate datetime2(2),
-			ReindexCount int default 0,
-			NotRunOnline bit default 0
-		);
-	else
-	begin
-		--тут добавим новые столбцы (если их нет):
-		if not exists (select column_id from sys.columns where object_id=OBJECT_ID('sputnik.db_maintenance.ReindexData') and name='~PageUsed_perc')
-			alter table sputnik.db_maintenance.ReindexData add [~PageUsed_perc] tinyint NULL;
-		if not exists (select column_id from sys.columns where object_id=OBJECT_ID('sputnik.db_maintenance.ReindexData') and name='~Row_cnt')
-			alter table sputnik.db_maintenance.ReindexData add [~Row_cnt] bigint NULL;
-		if not exists (select column_id from sys.columns where object_id=OBJECT_ID('sputnik.db_maintenance.ReindexData') and name='~RowSize_Kb')
-			alter table sputnik.db_maintenance.ReindexData add [~RowSize_Kb] numeric(9,3) NULL;
-
+	--check table ReindexData - failed if it not exists!
+	if object_id('sputnik.db_maintenance.ReindexData') IS NULL begin
+		print('Table [sputnik].[db_maintenance].[ReindexData] not exists!')
+		return 0
 	end
 	--В отдельном пакете соберём всю исходную информацию о таблицах и индексах по базе данных
 	--Вся полученная информация сохраняется во временной таблице #T_Source для дальнейшей обработки.
@@ -104,14 +73,15 @@ BEGIN
 			LastCommand nvarchar(500),
 			LastRunDate datetime2(2),
 			ReindexCount int default 0,
-			NotRunOnline bit default 0
+			NotRunOnline bit default 0,
+			NoReorganize bit default 0
 		);
 	set @tsql ='use '+QUOTENAME(@db_name_check)+';
 		SET NOCOUNT ON;
 		SET DEADLOCK_PRIORITY LOW;
 		SET LOCK_TIMEOUT 30000;
 		SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
-		insert into #T_Source (DBName, SchemaName, TableName, IndexName, TableID, IndexID, IndexType,SetFillFactor, TableCreateDate, TableModifyDate, PrepareDate, PageCount, AVG_Fragm_percent,[~PageUsed_perc],[~Row_cnt],[~RowSize_Kb], LastUpdateStats, LastCommand, LastRunDate,NotRunOnline)
+		insert into #T_Source (DBName, SchemaName, TableName, IndexName, TableID, IndexID, IndexType,SetFillFactor, TableCreateDate, TableModifyDate, PrepareDate, PageCount, AVG_Fragm_percent,[~PageUsed_perc],[~Row_cnt],[~RowSize_Kb], LastUpdateStats, LastCommand, LastRunDate,NotRunOnline, NoReorganize)
 		select 
 			'''+QUOTENAME(@db_name_check)+''' as DBName,QUOTENAME(S.name) as SchemaName, T.TableName, I.IndexName, 
 			T.object_id as TableID, I.index_id as IndexID,
@@ -127,7 +97,11 @@ BEGIN
 			case 
 				when LOB.index_id is null then 0
 				when LOB.index_id is not null then 1
-			end as NotRunOnline
+			end as NotRunOnline,
+			case 
+				when I.allow_page_locks > 0 then 0
+				else 1
+			end as NoReorganize
 		from
 			(
 				select 
@@ -135,7 +109,8 @@ BEGIN
 					QUOTENAME(name) as IndexName, 
 					index_id, 
 					type, 
-					fill_factor 
+					fill_factor,
+					[allow_page_locks]
 				from sys.indexes
 				where 
 					index_id>0  --Исключить Кучи.
@@ -183,8 +158,8 @@ BEGIN
 			USING #T_Source AS source --(DBName, SchemaName, TableName, IndexName, IndexType,SetFillFactor, TableCreateDate, TableModifyDate, PrepareDate, PageCount, AVG_Fragm_percent, LastUpdateStats, LastCommand, LastRunDate,NotRunOnline)
 			ON target.DBName=source.DBName AND target.SchemaName=source.SchemaName AND target.TableName=source.TableName AND target.IndexName=source.IndexName
 			WHEN NOT MATCHED THEN
-				INSERT (DBName, SchemaName, TableName, IndexName, TableID, IndexID, IndexType,SetFillFactor, TableCreateDate, TableModifyDate, PrepareDate, PageCount, AVG_Fragm_percent, [~PageUsed_perc],[~Row_cnt],[~RowSize_Kb], LastUpdateStats, LastCommand, LastRunDate,NotRunOnline)
-				VALUES (source.DBName, source.SchemaName, source.TableName, source.IndexName, source.TableID, source.IndexID, source.IndexType, source.SetFillFactor, source.TableCreateDate, source.TableModifyDate, source.PrepareDate, source.PageCount, source.AVG_Fragm_percent,source.[~PageUsed_perc],source.[~Row_cnt],source.[~RowSize_Kb], source.LastUpdateStats, source.LastCommand, source.LastRunDate, source.NotRunOnline)
+				INSERT (DBName, SchemaName, TableName, IndexName, TableID, IndexID, IndexType,SetFillFactor, TableCreateDate, TableModifyDate, PrepareDate, PageCount, AVG_Fragm_percent, [~PageUsed_perc],[~Row_cnt],[~RowSize_Kb], LastUpdateStats, LastCommand, LastRunDate,NotRunOnline, NoReorganize)
+				VALUES (source.DBName, source.SchemaName, source.TableName, source.IndexName, source.TableID, source.IndexID, source.IndexType, source.SetFillFactor, source.TableCreateDate, source.TableModifyDate, source.PrepareDate, source.PageCount, source.AVG_Fragm_percent,source.[~PageUsed_perc],source.[~Row_cnt],source.[~RowSize_Kb], source.LastUpdateStats, source.LastCommand, source.LastRunDate, source.NotRunOnline, source.NoReorganize)
 			WHEN NOT MATCHED BY source AND 
 				--дополнительное условие - удаляем только строки по текущей БД!
 				(target.DBName=QUOTENAME(@db_name_check)) THEN
@@ -195,13 +170,15 @@ BEGIN
 					target.TableID<>source.TableID OR target.IndexID<>source.IndexID OR target.IndexType<>source.IndexType
 					OR target.SetFillFactor<>source.SetFillFactor OR target.TableCreateDate<>source.TableCreateDate
 					OR target.TableModifyDate<>source.TableModifyDate OR target.NotRunOnline<>source.NotRunOnline
+					OR target.NoReorganize<>source.NoReorganize
 				)
 			THEN
 				UPDATE SET
 					target.TableID=source.TableID, target.IndexID=source.IndexID, target.IndexType=source.IndexType, 
 					target.SetFillFactor=source.SetFillFactor, target.TableCreateDate=source.TableCreateDate, 
 					target.TableModifyDate=source.TableModifyDate, target.PrepareDate=source.PrepareDate, 
-					target.LastUpdateStats=source.LastUpdateStats, target.NotRunOnline=source.NotRunOnline
+					target.LastUpdateStats=source.LastUpdateStats, target.NotRunOnline=source.NotRunOnline,
+					target.NoReorganize=source.NoReorganize
 		;	
 	END TRY
 	BEGIN CATCH

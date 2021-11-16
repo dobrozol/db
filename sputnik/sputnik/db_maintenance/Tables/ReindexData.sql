@@ -19,6 +19,7 @@
     [LastCommand]       NVARCHAR (500) NULL,
     [LastRunDate]       DATETIME2 (2)  NULL,
     [ReindexCount]      INT            DEFAULT ((0)) NULL,
-    [NotRunOnline]      BIT            DEFAULT ((0)) NULL
+    [NotRunOnline]      BIT            DEFAULT ((0)) NULL,
+    [NoReorganize]      BIT            DEFAULT ((0)) NULL
 );
 
