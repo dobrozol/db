@@ -113,7 +113,7 @@
 
 		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX),@flag_fail bit, @db_id_check int, @obj_id int, @ind_id int, @command_type tinyint, @tsql_handle_log varchar(2000), @commant_text_log Nvarchar(MAX),@AllCores_cnt smallint, @MaxDop_set smallint=@MaxDop;
 		declare @tt_start_usp datetime2(2), @time_elapsed_sec int;
-		declare @tsql_handle nvarchar (2400), @tsql nvarchar (2400), @tsqlcheck nvarchar (800), @StopList_str NVARCHAR(MAX), @walp_option varchar(300)='', @mtHead varchar(500), @mtBody varchar(500), @mtEnd varchar(500) ;
+		declare @tsql_handle nvarchar (4000), @tsql nvarchar (4000), @tsqlcheck nvarchar (2000), @StopList_str NVARCHAR(MAX), @walp_option varchar(300)='', @mtHead varchar(1000), @mtBody varchar(1000), @mtEnd varchar(1000) ;
 		declare @MirrorState nvarchar(75);
 		set @tt_start_usp=CAST(SYSDATETIME() AS datetime2(2));
 		--Определяем текущую редакцию SQL Server. MaxDop будет работать только в Enterprise:
@@ -131,16 +131,21 @@
 		--Setting and checking locks on a maintained index for multithreading
 		set @mtHead = '
 	declare @lockResult int;
-	exec @lockResult = sp_getapplock ';
+	begin tran
+		exec @lockResult = sp_getapplock ';
 	
 		set @mtBody = ', ''Exclusive'', ''Session'', 0;
-	if @lockResult<0
-		throw 60000, ''This index is already locked by another process'', 0;
-	else
-		'
-		set @mtEnd = '
+		if @lockResult<0 begin
+			rollback
+			throw 60000, ''This index is already locked by another process'', 0;
+		end
+		else begin
+			'
+			set @mtEnd = '
+			commit
+		end
 '
-	
+
 		--Заголовок запроса для обслуживания индексов!
 		set @tsql_handle= N'
 	SET DEADLOCK_PRIORITY '+CAST(@DeadLck_PR as varchar(2))+';
@@ -342,7 +347,7 @@
 					set @tsql=@tsql_handle+N'
 		use '+QUOTENAME(@DB_current)+';
 		'			+@mtHead
-					+''''+convert(VARCHAR(32), HashBytes('MD5', concat(@DB_Current, '.', @SchemaName, '.', @TableName,'.', @IndexName)), 2)+''''
+					+''''+convert(VARCHAR(32), HashBytes('MD5', concat(@DB_Current, '.', @SchemaName, '.', @TableName)), 2)+''''
 					+@mtBody
 					+@command
 					+@mtEnd;
