@@ -136,13 +136,13 @@
 	
 		set @mtBody = ', ''Exclusive'', ''Session'', 0;
 		if @lockResult<0 begin
-			rollback
+			rollback;
 			throw 60000, ''This index is already locked by another process'', 0;
 		end
 		else begin
 			'
 			set @mtEnd = '
-			commit
+			commit;
 		end
 '
 
