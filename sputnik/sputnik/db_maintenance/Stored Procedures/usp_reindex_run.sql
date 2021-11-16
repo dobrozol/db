@@ -142,12 +142,13 @@
 		else begin
 			'
 			set @mtEnd = '
-			commit;
 		end
+	commit;
 '
 
 		--Заголовок запроса для обслуживания индексов!
 		set @tsql_handle= N'
+	SET	xact_abort ON;
 	SET DEADLOCK_PRIORITY '+CAST(@DeadLck_PR as varchar(2))+';
 	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 	SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
