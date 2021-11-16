@@ -75,6 +75,8 @@
 					16.11.2021 (3.020) 
 					added NoReorganize parameter (if page-level locks are disabled in the index).
 					reorganize will be replaced with a rebuild index
+					16.11.2021 (3.030) 
+					added managed locks for multithreading.
 	-- ============================================= */
 	CREATE PROCEDURE [db_maintenance].[usp_reindex_run]
 		@db_name nvarchar(2000)=NULL,
@@ -111,7 +113,7 @@
 
 		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX),@flag_fail bit, @db_id_check int, @obj_id int, @ind_id int, @command_type tinyint, @tsql_handle_log varchar(2000), @commant_text_log Nvarchar(MAX),@AllCores_cnt smallint, @MaxDop_set smallint=@MaxDop;
 		declare @tt_start_usp datetime2(2), @time_elapsed_sec int;
-		declare @tsql_handle nvarchar (2400), @tsql nvarchar (2400), @tsqlcheck nvarchar (800), @StopList_str NVARCHAR(MAX), @walp_option varchar(300)='';
+		declare @tsql_handle nvarchar (2400), @tsql nvarchar (2400), @tsqlcheck nvarchar (800), @StopList_str NVARCHAR(MAX), @walp_option varchar(300)='', @mtHead varchar(500), @mtBody varchar(500), @mtEnd varchar(500) ;
 		declare @MirrorState nvarchar(75);
 		set @tt_start_usp=CAST(SYSDATETIME() AS datetime2(2));
 		--Определяем текущую редакцию SQL Server. MaxDop будет работать только в Enterprise:
@@ -125,6 +127,24 @@
 		--Формируем список исключений таблиц, индексы для этих таблиц не будут обслужены в текущем запуске.
 		select @StopList_str=StopList_str from sputnik.db_maintenance.StopLists where UniqueName=@UniqueName_SL;
 		select @StopList_str=COALESCE(@StopList_str,'');
+
+		--Setting and checking locks on a maintained index for multithreading
+		set @mtHead = '
+begin tran
+	declare @lockResult int;
+	exec @lockResult = sp_getapplock ';
+	
+		set @mtBody = ', ''Exclusive'', ''Transaction'', 0;
+	if @lockResult<0 begin
+		rollback;
+		throw 60000, ''This index is already locked by another process'', 0;
+	end
+	else
+		'
+		set @mtEnd = '	
+	end
+commit
+'
 	
 		--Заголовок запроса для обслуживания индексов!
 		set @tsql_handle= N'
@@ -326,7 +346,11 @@
 					end
 					set @tsql=@tsql_handle+N'
 		use '+QUOTENAME(@DB_current)+';
-		'			+@command;
+		'			+@mtHead
+					+''''+convert(VARCHAR(32), HashBytes('MD5', concat_ws('.', @DB_Current, @SchemaName, @TableName, @IndexName)), 2)+''''
+					+@mtBody
+					+@command
+					+@mtEnd;
 			
 					set @flag_fail=0;
 					set @StrErr=NULL;
