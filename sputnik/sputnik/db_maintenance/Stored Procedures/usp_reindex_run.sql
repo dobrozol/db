@@ -141,8 +141,7 @@ begin tran
 	end
 	else
 		'
-		set @mtEnd = '	
-	end
+		set @mtEnd = '
 commit
 '
 	
