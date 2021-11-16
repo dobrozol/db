@@ -347,7 +347,7 @@ commit
 					set @tsql=@tsql_handle+N'
 		use '+QUOTENAME(@DB_current)+';
 		'			+@mtHead
-					+''''+convert(VARCHAR(32), HashBytes('MD5', concat_ws('.', @DB_Current, @SchemaName, @TableName, @IndexName)), 2)+''''
+					+''''+convert(VARCHAR(32), HashBytes('MD5', concat(@DB_Current, '.', @SchemaName, '.', @TableName,'.', @IndexName)), 2)+''''
 					+@mtBody
 					+@command
 					+@mtEnd;
