@@ -131,19 +131,24 @@
 		--Setting and checking locks on a maintained index for multithreading
 		set @mtHead = '
 	declare @lockResult int;
-	begin tran
-		exec @lockResult = sp_getapplock ';
+	begin try
+		begin tran
+			exec @lockResult = sp_getapplock ';
 	
 		set @mtBody = ', ''Exclusive'', ''Transaction'', 0;
-		if @lockResult<0 begin
-			rollback;
-			throw 60000, ''This index is already locked by another process'', 0;
-		end
-		else begin
-			'
+			if @lockResult<0
+				throw 60000, ''This index is already locked by another process'', 0
+			else begin
+				'
 			set @mtEnd = '
-		end
-	commit;
+			end
+		commit;
+	end try
+	begin catch
+		if @@TRANCOUNT>0
+			rollback;
+		throw
+	end catch
 '
 
 		--Заголовок запроса для обслуживания индексов!
@@ -154,7 +159,7 @@
 	SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 		';
 		--Заголовок запроса для логгирования:
-		set @tsql_handle_log='--dlck_pr='+CAST(@DeadLck_PR as varchar(2))+';tr_iso_lvl=1;lck_tmt='+CAST(@Lck_Timeout as varchar(12))+';
+		set @tsql_handle_log='--spid='+cast(@@spid as varchar(5))+';dlck_pr='+CAST(@DeadLck_PR as varchar(2))+';tr_iso_lvl=1;lck_tmt='+CAST(@Lck_Timeout as varchar(12))+';
 		';
 		--Далее получаем индексы для обслуживания и формируем команды для обслуживания, и выполняем их по очереди в отдельном пакете.
 		declare @SchemaName nvarchar(2000), @TableName nvarchar(2000), @IndexName nvarchar(2000), @PageCount int, @AVG_Fragm_percent tinyint,@NotRunOnline bit, @NoReorganize bit;
