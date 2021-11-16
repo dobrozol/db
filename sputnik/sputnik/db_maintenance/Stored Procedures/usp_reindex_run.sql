@@ -130,19 +130,15 @@
 
 		--Setting and checking locks on a maintained index for multithreading
 		set @mtHead = '
-begin tran
 	declare @lockResult int;
 	exec @lockResult = sp_getapplock ';
 	
-		set @mtBody = ', ''Exclusive'', ''Transaction'', 0;
-	if @lockResult<0 begin
-		rollback;
+		set @mtBody = ', ''Exclusive'', ''Session'', 0;
+	if @lockResult<0
 		throw 60000, ''This index is already locked by another process'', 0;
-	end
 	else
 		'
 		set @mtEnd = '
-commit
 '
 	
 		--Заголовок запроса для обслуживания индексов!
