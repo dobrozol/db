@@ -31,6 +31,7 @@
 					02.12.2017 (2.105) Расширены строковые переменные (БД).
 					14.11.2018 (2.110) Добавлена совместимость с 2008 версией (iif заменены на case).
 					13.11.2021 (2.112) maxdop option was added for using in reindex operations
+					17.11.2021 (2.113) policy_offline option was added for using in reindex operations
 	-- ============================================= */
 	CREATE PROCEDURE db_maintenance.usp_reindex_start
 		@DBFilter nvarchar(2000) = null,
@@ -46,7 +47,7 @@
 		@filter_fragm_min tinyint, @filter_fragm_max tinyint, @filter_old_hours tinyint, 
 		@fragm_tresh tinyint, @set_fillfactor tinyint, @set_compression char(4), @set_online char(3), @set_sortintempdb char(3), @PauseMirroring bit,
 		@DeadLck_PR smallint, @Lck_Timeout int, @filter_rows_min int, @filter_rows_max int, @filter_perc_min decimal(18,2), @filter_perc_max decimal(18,2),
-		@policy_scan varchar(100), @timeout_sec int, @set_maxdop smallint, @walp_max_duration smallint, @walp_abort_after_wait varchar(20);
+		@policy_scan varchar(100), @timeout_sec int, @set_maxdop smallint, @walp_max_duration smallint, @walp_abort_after_wait varchar(20), @policy_offline tinyint;
 		declare @mv_Name nvarchar(200);
 		declare @filter_DataUsedMb_min numeric(9,1), @filter_DataUsedMb_max numeric(9,1);
 		set @getdate=GETDATE();
@@ -107,6 +108,7 @@
 							,[set_maxdop]
 							,[walp_max_duration]
 							,[walp_abort_after_wait]
+							,[policy_offline]
 					from sputnik.db_maintenance.ReindexConf
 					where
 						(@DBFilter is null or DBName=@DBFilter)
@@ -173,7 +175,7 @@
 			fetch next from INDEXs
 				into @DBName, @UniqueName_SL, @RowLimit, @delayperiod, @filter_pages_min, @filter_pages_max, @filter_fragm_min, @filter_fragm_max,
 					@filter_old_hours, @fragm_tresh, @set_fillfactor, @set_compression, @set_online, @set_sortintempdb, @PauseMirroring, @DeadLck_PR,
-					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait;
+					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait, @policy_offline;
 			while @@FETCH_STATUS=0
 			begin
 				if @StartUpdateStats=0
@@ -199,7 +201,8 @@
 						@Lck_Timeout=@Lck_Timeout,
 						@only_show=@only_show,
 						@timeout_sec=@timeout_sec,
-						@MaxDop = @set_maxdop;
+						@MaxDop = @set_maxdop,
+						@policy_offline = @policy_offline;
 				else
 				BEGIN
 					--Запуск Сбора статистик(информации) по индексам и таблицам!
@@ -220,7 +223,7 @@
 				fetch next from INDEXs
 				into @DBName, @UniqueName_SL, @RowLimit, @delayperiod, @filter_pages_min, @filter_pages_max, @filter_fragm_min, @filter_fragm_max,
 					@filter_old_hours, @fragm_tresh, @set_fillfactor, @set_compression, @set_online, @set_sortintempdb, @PauseMirroring, @DeadLck_PR,
-					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait;
+					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait, @policy_offline;
 			end;
 			CLOSE INDEXs;
 			DEALLOCATE INDEXs;

@@ -77,6 +77,8 @@
 					reorganize will be replaced with a rebuild index
 					16.11.2021 (3.030) 
 					added managed locks for multithreading.
+					17.11.2021 (3.040) 
+					refactoring, fixing and adding new value for parameter @policy_offline
 	-- ============================================= */
 	CREATE PROCEDURE [db_maintenance].[usp_reindex_run]
 		@db_name nvarchar(2000)=NULL,
@@ -101,7 +103,7 @@
 		@PageUsed_tresh tinyint = 80,	--% заполнения страницы, если меньше этого значения то обязательно нужен REBUILD, а не reorganize.
 		@MaxDop smallint = NULL,		--кол-во ядер CPU на которых будет выполнятся обслуживание индекса (Работает только в Enterprise!).
 		@timeout_sec int = NULL,		--Ограничение времени выполнения в данной процедуре в сек. Если NULL (или 0) - бесконечно.
-		@policy_offline tinyint = 2,		--Определяет что делать, если Online Rebuild невозможен: 0-Rebuild Offline,1-пропустить,2-Reorganize.
+		@policy_offline tinyint = 3,		--Determines what to do if online rebuild is not possible: 0-skip, 1-offline rebuild, 2-reorganize, 3-reorganize or offline rebuild.
 		@walp_max_duration smallint = NULL,	--option WAIT_AT_LOW_PRIORITY parameter MAX_DURATION (in minutes). NULL - this option will not use
 		@walp_abort_after_wait varchar(20) = 'NONE' --option WAIT_AT_LOW_PRIORITY parameter ABORT_AFTER_WAIT (NONE, SELF, BLOCKERS)
 	AS
@@ -113,10 +115,10 @@
 
 		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX),@flag_fail bit, @db_id_check int, @obj_id int, @ind_id int, @command_type tinyint, @tsql_handle_log varchar(2000), @commant_text_log Nvarchar(MAX),@AllCores_cnt smallint, @MaxDop_set smallint=@MaxDop;
 		declare @tt_start_usp datetime2(2), @time_elapsed_sec int;
-		declare @tsql_handle nvarchar (4000), @tsql nvarchar (4000), @tsqlcheck nvarchar (2000), @StopList_str NVARCHAR(MAX), @walp_option varchar(300)='', @mtHead varchar(1000), @mtBody varchar(1000), @mtEnd varchar(1000) ;
+		declare @tsql_handle nvarchar (4000), @tsql nvarchar (max), @tsqlcheck nvarchar (2000), @StopList_str NVARCHAR(MAX), @walp_option varchar(300)='', @commandWithAppLock varchar(max);
 		declare @MirrorState nvarchar(75);
 		set @tt_start_usp=CAST(SYSDATETIME() AS datetime2(2));
-		--Определяем текущую редакцию SQL Server. MaxDop будет работать только в Enterprise:
+		--Определяем текущую редакцию SQL Server. MaxDop/online rebuild будет работать только в Enterprise:
 		DECLARE @Ed VARCHAR(3)=LEFT(CAST(SERVERPROPERTY('Edition') AS VARCHAR(128)),3);
 
 		IF @TableFilter is not null
@@ -128,35 +130,11 @@
 		select @StopList_str=StopList_str from sputnik.db_maintenance.StopLists where UniqueName=@UniqueName_SL;
 		select @StopList_str=COALESCE(@StopList_str,'');
 
-		--Setting and checking locks on a maintained index for multithreading
-		set @mtHead = '
-	declare @lockResult int;
-	begin try
-		begin tran
-			exec @lockResult = sp_getapplock ';
-	
-		set @mtBody = ', ''Exclusive'', ''Transaction'', 0;
-			if @lockResult<0
-				throw 60000, ''This index is already locked by another process'', 0
-			else begin
-				'
-			set @mtEnd = '
-			end
-		commit;
-	end try
-	begin catch
-		if @@TRANCOUNT>0
-			rollback;
-		throw
-	end catch
-'
-
 		--Заголовок запроса для обслуживания индексов!
-		set @tsql_handle= N'
-	SET	xact_abort ON;
-	SET DEADLOCK_PRIORITY '+CAST(@DeadLck_PR as varchar(2))+';
-	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
-	SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
+		set @tsql_handle= N'SET	xact_abort ON;
+SET DEADLOCK_PRIORITY '+CAST(@DeadLck_PR as varchar(2))+';
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 		';
 		--Заголовок запроса для логгирования:
 		set @tsql_handle_log='--spid='+cast(@@spid as varchar(5))+';dlck_pr='+CAST(@DeadLck_PR as varchar(2))+';tr_iso_lvl=1;lck_tmt='+CAST(@Lck_Timeout as varchar(12))+';
@@ -207,7 +185,6 @@
 			and state_desc='ONLINE'
 			and database_id>4
 			and is_read_only=0
-			and (name NOT LIKE '201%(%)%' and name NOT LIKE 'S201%(%)%')
 			and adb.db is null;
 		OPEN DB;
 		FETCH NEXT FROM DB INTO @DB_current;
@@ -315,24 +292,24 @@
 				if (isnull(@MaxDop,-1)<0)
 					exec @MaxDop_set = [db_maintenance].[usp_getMaxDop] @PageCount;
 
-				set @check_set_online=@set_online;
-				IF (@check_set_online='ON' and @NotRunOnline=1 and @policy_offline=1)
+				set @check_set_online=case @Ed when 'Ent' then @set_online else 'OFF' end;
+				IF (@check_set_online='ON' and @NotRunOnline=1 and (@policy_offline=0 or (@policy_offline=2 and @NoReorganize=1)))
 				BEGIN
 					--Пропустить этот индекс
 					set @command_type=8;
-					set @commant_text_log='Этот индекс пропущен, т.к. @NotRunOnline=1 и @policy_offline=1';
+					set @commant_text_log=concat('This index was skipped because @NotRunOnline=',@NotRunOnline,'; @policy_offline=',@policy_offline,'; @NoReorganize=',@NoReorganize);
 					set @i_cnt_skip += 1;
 				END
 				ELSE BEGIN
 	
-					if @check_set_online='ON' and @NotRunOnline=1 and @policy_offline=0
+					if @check_set_online='ON' and @NotRunOnline=1 and (@policy_offline=1 or (@policy_offline=3 and @NoReorganize=1))
 						set @check_set_online='OFF';	
 						
 					--rebuild делаем только если фрагментация меньше @fragm_tresh и если заполненость страницы более чем @PageUsed_tresh
 					--в остальных случаях нужен reorginize!
 					if (
 						(@AVG_Fragm_percent <= @fragm_tresh AND (@PageU_prc>=@PageUsed_tresh)) 
-						OR (@NotRunOnline=1 AND @check_set_online='ON' AND @policy_offline=2)
+						OR (@NotRunOnline=1 AND @check_set_online='ON' AND @policy_offline IN (2,3))
 					) and isnull(@NoReorganize,0)=0
 					begin
 						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' reorganize ';
@@ -350,13 +327,16 @@
 						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' rebuild with ( sort_in_tempdb = '+@set_sortintempdb+', online = '+@check_set_online+@walp_option+N' , data_compression = '+@set_compression+', fillfactor='+cast(@set_fillfactor as varchar(5))+CASE WHEN @Ed='Ent' THEN ', MAXDOP = '+cast(@MaxDop_set as varchar(5)) ELSE '' END+')';
 
 					end
+					exec [db_maintenance].[usp_addAppLockToCommand]
+						@dbName = @DB_Current,
+						@schemaName = @SchemaName,
+						@objectName = @TableName,
+						@command = @command,
+						@resultCommand = @commandWithAppLock output;
+
 					set @tsql=@tsql_handle+N'
-		use '+QUOTENAME(@DB_current)+';
-		'			+@mtHead
-					+''''+convert(VARCHAR(32), HashBytes('MD5', concat(@DB_Current, '.', @SchemaName, '.', @TableName)), 2)+''''
-					+@mtBody
-					+@command
-					+@mtEnd;
+	use '+QUOTENAME(@DB_current)+';
+	'				+@commandWithAppLock;
 			
 					set @flag_fail=0;
 					set @StrErr=NULL;

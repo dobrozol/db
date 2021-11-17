@@ -20,6 +20,7 @@
     [timeout_sec]      INT            NULL,
     [set_maxdop]       SMALLINT       NULL, --set maxdop for reindex operation
     [walp_max_duration]     SMALLINT  NULL, --option WAIT_AT_LOW_PRIORITY parameter MAX_DURATION (in minutes). NULL - this option will not use
-    [walp_abort_after_wait] VARCHAR(20) DEFAULT ('NONE') NOT NULL --option WAIT_AT_LOW_PRIORITY parameter ABORT_AFTER_WAIT (NONE, SELF, BLOCKERS)
+    [walp_abort_after_wait] VARCHAR(20) DEFAULT ('NONE') NOT NULL, --option WAIT_AT_LOW_PRIORITY parameter ABORT_AFTER_WAIT (NONE, SELF, BLOCKERS)
+    [policy_offline]   TINYINT        DEFAULT (3) --Determines what to do if online rebuild is not possible: 0-skip, 1-offline rebuild, 2-reorganize, 3-reorganize or offline rebuild.
 );
 
