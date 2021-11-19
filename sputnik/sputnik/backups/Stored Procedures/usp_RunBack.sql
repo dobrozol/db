@@ -2,7 +2,7 @@
 	-- Author:		Андрей Иванов (sqland1c)
 	-- Create date: 23.12.2013 (1.0)
 	-- Description: Эта процедура выполняет конкретный бэкап для конкретной базы данных.
-					Тип бэкапа и все настройки хранятся в таблицу sputnik.backups.BackConf.
+					Тип бэкапа и все настройки хранятся в таблицу backups.BackConf.
 					После выполнения команды BACKUP происходит копирование бэкапа на удалённый ресурс (если он задан и отличается от локального).
 					Эта процедура создана на основе процедур usp_PegLogBack и usp_PegFullBack и полностью заменяет обе эти процедуры, 
 					добавляя расширенный функционал!
@@ -89,37 +89,37 @@
 			SET @StrStats=N',STATS=25';
 		--Определяем текущий день недели! Сначала ищем настройку в таблице BackConfWeekly для недельных бэкапов по текущему дню недели.
 		--Если ничего нет, тогда ищем настройку в обычной таблице BackConf.
-		select @WeekDay=sputnik.info.uf_GetWeekDay(@getdate);
+		select @WeekDay=info.uf_GetWeekDay(@getdate);
 		select @MonthDay=DATEPART ( DAY , @getdate );
 		--update: теперь, если задан Тип Full. То проверяем и Full и Diff.
 		--	Алгоритм такой: 1. ищем Full в Weekly. 2. Ищем Diff в Weekly. 3.Ищем Full в Daily 4. Ищем Diff в Daily	
 
 		SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG 
-		FROM sputnik.backups.BackConfWeekly
+		FROM backups.BackConfWeekly
 		WHERE Kind=@TypeBack and DBName=@DBNAME_in and MonthDay=@MonthDay;
 		if @DBName is null and @TypeBack='Full' and @OnlyFull=0
 			SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG  
-			FROM sputnik.backups.BackConfWeekly
+			FROM backups.BackConfWeekly
 			WHERE Kind='Diff' and DBName=@DBNAME_in and MonthDay=@MonthDay;
 
 		if @DBName is null
 		begin
 			SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG 
-			FROM sputnik.backups.BackConfWeekly
+			FROM backups.BackConfWeekly
 			WHERE Kind=@TypeBack and DBName=@DBNAME_in and WeekDay=@WeekDay;
 			if @DBName is null and @TypeBack='Full' and @OnlyFull=0
 				SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG  
-				FROM sputnik.backups.BackConfWeekly
+				FROM backups.BackConfWeekly
 				WHERE Kind='Diff' and DBName=@DBNAME_in and WeekDay=@WeekDay;
 		end
 		if @DBName is null
 		begin
 			SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG 
-			FROM sputnik.backups.BackConf 
+			FROM backups.BackConf 
 			WHERE Kind=@TypeBack and DBName=@DBNAME_in
 			if @DBName is null and @TypeBack='Full' and @OnlyFull=0
 				SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG  
-				FROM sputnik.backups.BackConf
+				FROM backups.BackConf
 				WHERE Kind='Diff' and DBName=@DBNAME_in;
 		end
 		--Новый алгоритм (только для полных бэкапов!): если использован параметр @OnlyFull и настройки бэкапов не были найдены
@@ -129,11 +129,11 @@
 			DECLARE @T TABLE (DBName NVARCHAR(300), LocalDir NVARCHAR(500), NetDir NVARCHAR(500), LocalDays INT, NetDays INT, Kind VARCHAR(4), Ord tinyint);
 			INSERT INTO @T
 			SELECT TOP 1 DBName, LocalDir, NetDir, LocalDays, NetDays, Kind, 1 AS Ord
-			FROM sputnik.backups.BackConfWeekly
+			FROM backups.BackConfWeekly
 			WHERE Kind='Full' and DBName=@DBNAME_in and MonthDay BETWEEN 1 AND 31
 			UNION ALL
 			SELECT TOP 1 DBName, LocalDir, NetDir, LocalDays, NetDays, Kind, 2 AS Ord
-			FROM sputnik.backups.BackConfWeekly
+			FROM backups.BackConfWeekly
 			WHERE Kind='Full' and DBName=@DBNAME_in and WeekDay BETWEEN 1 AND 7;
 			SELECT @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind
 			FROM @T

@@ -25,12 +25,12 @@ BEGIN
 	IF @BackupFullID IS NOT NULL
 	BEGIN
 		SELECT @DB_LSN=MIN(database_backup_lsn)
-		FROM [sputnik].[backups].[BackupHistory]
+		FROM [backups].[BackupHistory]
 		WHERE DB_NAME=@DBName
 		AND database_backup_lsn>
 			(
 				SELECT [database_backup_LSN]
-				FROM [sputnik].[backups].[BackupHistory]
+				FROM [backups].[BackupHistory]
 				WHERE ID=@BackupFullID
 			)
 	END
@@ -48,7 +48,7 @@ BEGIN
 	from
 	(
 		SELECT DB_NAME, BACKUP_File, Backup_Finish_Date, backup_start_date, ID, last_LSN
-		FROM [sputnik].[backups].[BackupHistory]
+		FROM [backups].[BackupHistory]
 		WHERE
 			DB_NAME=@DBName 
 			AND [Backup_Type]='Log'
@@ -56,6 +56,6 @@ BEGIN
 			AND ([ID]>@FilterBackupID OR @FilterBackupID IS NULL) 
 			AND ([Backup_Finish_Date]<=@ToDate or @ToDate IS NULL)
 	) AS LogBackups
-	CROSS APPLY sputnik.info.uf_GetBackConf(LogBackups.[DB_Name], 'Log', LogBackups.backup_start_date) AS CatalogInfo
+	CROSS APPLY info.uf_GetBackConf(LogBackups.[DB_Name], 'Log', LogBackups.backup_start_date) AS CatalogInfo
 	order by LogBackups.last_LSN;
 END

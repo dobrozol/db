@@ -53,12 +53,12 @@
 		set @getdate=GETDATE();
 		set @gettime=CAST(@getdate as TIME);
 		--Определяем текущий день недели!
-		select @WeekDay=sputnik.info.uf_GetWeekDay(@getdate);
+		select @WeekDay=info.uf_GetWeekDay(@getdate);
 
 		--Определяем наиболее подходящее окно обслуживания для текущего времени!
 		--insert into @mv(Name)
 		select top 1 @mv_Name=UniqueName
-		from sputnik.db_maintenance.mw as mw
+		from db_maintenance.mw as mw
 		where 
 				(@getdate >= mw.DateOpen OR mw.DateOpen IS NULL)
 			  and (@getdate <= mw.DateClose OR mw.DateClose IS NULL)
@@ -73,7 +73,7 @@
 				)
 			  )
 			  and (CHARINDEX(CAST(@WeekDay as CHAR(1)),mw.WeekDays/*,CAST(@WeekDay as CHAR(1))*/)>0 OR mw.WeekDays IS NULL)
-			  /*and UniqueName IN (select UniqueName_MW from sputnik.db_maintenance.ReindexConf)*/
+			  /*and UniqueName IN (select UniqueName_MW from db_maintenance.ReindexConf)*/
 		order by case when TimeClose<TimeOpen then DATEDIFF(minute, TimeOpen, '23:59:59')+1+DATEDIFF(minute, '00:00:00', TimeClose) else DATEDIFF (minute, TimeOpen,TimeClose) end;
 		--select @mv_Name as MW_Name;
 
@@ -109,7 +109,7 @@
 							,[walp_max_duration]
 							,[walp_abort_after_wait]
 							,[policy_offline]
-					from sputnik.db_maintenance.ReindexConf
+					from db_maintenance.ReindexConf
 					where
 						(@DBFilter is null or DBName=@DBFilter)
 						and (UniqueName_MW = @mv_Name ) 
@@ -151,7 +151,7 @@
 						  ,[DeadLck_PR]
 						  ,[Lck_Timeout]
 						  ,[timeout_sec]
-					from sputnik.db_maintenance.RecomputeStatsConf
+					from db_maintenance.RecomputeStatsConf
 					where
 						(@DBFilter is null or DBName=@DBFilter)
 						and (UniqueName_MW = @mv_Name ) 

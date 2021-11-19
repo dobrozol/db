@@ -86,7 +86,7 @@
 		DECLARE @TSQL NVARCHAR(MAX),@obj_filter_str nvarchar(2000), @StopList_str NVARCHAR(MAX);
 		set @tt_start_usp=CAST(SYSDATETIME() AS datetime2(2));
 		--Формируем список исключений таблиц, индексы для этих таблиц не будут обслужены в текущем запуске.
-		select @StopList_str=StopList_str from sputnik.db_maintenance.StopLists where UniqueName=@UniqueName_SL;
+		select @StopList_str=StopList_str from db_maintenance.StopLists where UniqueName=@UniqueName_SL;
 		select @StopList_str=COALESCE(@StopList_str,'');
 
 		IF OBJECT_ID('tempdb.dbo.#T_ST') IS NOT NULL
@@ -266,7 +266,7 @@ USE ['+DB+N'];
 					BEGIN
 						set @commant_text_log=N'Достигнут TimeOut в usp_RecomputeStats. @TimeOut_sec='+cast(@TimeOut_sec as nvarchar(30))+N'; @time_elapsed_sec='+cast(@time_elapsed_sec as nvarchar(30));
 						--Логгируем в историю Обслуживания БД:
-						EXEC sputnik.db_maintenance.usp_WriteHS 
+						EXEC db_maintenance.usp_WriteHS 
 							@DB_ID=@db_id,
 							@Command_Type=101, --101-TimeOut for Update Statistics (usp_RecomputeStats)
 							@Command_Text_1000=@commant_text_log,
@@ -290,7 +290,7 @@ USE ['+DB+N'];
 				END CATCH
 				set @commant_text_log=@Cmd_handle_log+@UpdCmd;
 				--Логгируем в историю Обслуживания БД:
-				EXEC sputnik.db_maintenance.usp_WriteHS 
+				EXEC db_maintenance.usp_WriteHS 
 					@DB_ID=@db_id,
 					@Object_ID=@obj_id,
 					@Index_Stat_ID=@stat_id,
@@ -314,7 +314,7 @@ USE ['+DB+N'];
 		BEGIN
 			set @commant_text_log=N'Задача завершена: usp_RecomputeStats. Обработано объектов: '+CONVERT(NVARCHAR(10),@i_cnt)+N' . Параметры: @DBName='''+COALESCE(@DBName,'NULL')+N''',@RowCount='+CONVERT(nvarchar(20),@RowLimit);
 			--Логгируем в историю Обслуживания БД:
-			EXEC sputnik.db_maintenance.usp_WriteHS 
+			EXEC db_maintenance.usp_WriteHS 
 				@DB_ID=0,
 				@Command_Type=201, --201-TaskCompleted for Update Statistics (usp_RecomputeStats)
 				@Command_Text_1000=@commant_text_log,

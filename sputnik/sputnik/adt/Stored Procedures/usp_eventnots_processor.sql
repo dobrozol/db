@@ -70,18 +70,18 @@ as
 				--Проверка существования такой же БД: если есть записи в аудите, значит эта БД уже была и НЕ будем отправлять уведомление!
 				declare @last_tt datetime2(2); 
 				SELECT @last_tt=max(tt)
-				FROM [sputnik].[adt].[instance_hs]
+				FROM [adt].[instance_hs]
 				WHERE tt between dateadd(hour,-24,@tt) and @tt 
 					and db=@db;
 
-				insert into sputnik.adt.instance_hs (tt,event_type,db,spid,[login],[host],program,sqltext,textdata)
+				insert into adt.instance_hs (tt,event_type,db,spid,[login],[host],program,sqltext,textdata)
 				values(@tt,@event_type,@db,@spid,@login,@host,@program,@sqltext,@textdata);
 
 				if (@event_type='CREATE_DATABASE' or (@event_type='AUDIT_BACKUP_RESTORE_EVENT' and @sqltext like 'restore%database%')) and @last_tt is null
-					exec [sputnik].[adt].[usp_mail_eventdb] @dbname=@db, @tt=@tt, @login=@login, @hostname=@host, @program=@program, @sqlcommand=@sqltext;
+					exec [adt].[usp_mail_eventdb] @dbname=@db, @tt=@tt, @login=@login, @hostname=@host, @program=@program, @sqlcommand=@sqltext;
 
 				if (@event_type='DROP_DATABASE')
-					exec [sputnik].[adt].[usp_mail_eventdb] @dbname=@db, @tt=@tt, @login=@login, @hostname=@host, @program=@program, @sqlcommand=@sqltext, @dropdb=1;
+					exec [adt].[usp_mail_eventdb] @dbname=@db, @tt=@tt, @login=@login, @hostname=@host, @program=@program, @sqlcommand=@sqltext, @dropdb=1;
 
 				set @host=null;set @program=null;
 			end try

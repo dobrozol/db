@@ -127,7 +127,7 @@
 			set @TableFilter='';
 
 		--Формируем список исключений таблиц, индексы для этих таблиц не будут обслужены в текущем запуске.
-		select @StopList_str=StopList_str from sputnik.db_maintenance.StopLists where UniqueName=@UniqueName_SL;
+		select @StopList_str=StopList_str from db_maintenance.StopLists where UniqueName=@UniqueName_SL;
 		select @StopList_str=COALESCE(@StopList_str,'');
 
 		--Заголовок запроса для обслуживания индексов!
@@ -267,7 +267,7 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 					BEGIN
 						set @commant_text_log='Достигнут TimeOut в usp_reindex_run. @TimeOut_sec='+cast(@TimeOut_sec as varchar(30))+'; @time_elapsed_sec='+cast(@time_elapsed_sec as varchar(30));
 						--Логгируем в историю Обслуживания БД:
-						EXEC sputnik.db_maintenance.usp_WriteHS 
+						EXEC db_maintenance.usp_WriteHS 
 							@DB_ID=@db_id_check,
 							@Command_Type=100, --100-TimeOut for Reindex (usp_reindex_run)
 							@Command_Text_1000=@commant_text_log,
@@ -367,7 +367,7 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 				END;
 		
 			--Логгируем в историю Обслуживания БД:
-				EXEC sputnik.db_maintenance.usp_WriteHS 
+				EXEC db_maintenance.usp_WriteHS 
 					@DB_ID=@db_id_check,
 					@Object_ID=@obj_id,
 					@Index_Stat_ID=@ind_id,
@@ -399,7 +399,7 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 			END
 			+' . Параметры: @db_name='''+COALESCE(@db_name,'NULL')+''',@RowCount='+CONVERT(VARCHAR(10),@RowLimit);
 			--Логгируем в историю Обслуживания БД:
-			EXEC sputnik.db_maintenance.usp_WriteHS 
+			EXEC db_maintenance.usp_WriteHS 
 				@DB_ID=0,
 				@Command_Type=200, --200-TaskCompleted for Reindex (usp_reindex_run)
 				@Command_Text_1000=@commant_text_log,

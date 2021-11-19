@@ -65,8 +65,8 @@ BEGIN
 	insert into #Missing_Backups([DB Name],[Type],[Last Backup], RecoveryModel, create_date, dbowner)
 	SELECT mb.[Database],mb.[Type],mb.[Last Backup], mb.RecoveryModel, mb.create_date, mb.dbowner
 	FROM cte_src01 mb
-	--Дополнительно перед отправкой сверим список исключений в базе sputnik.
-	LEFT JOIN sputnik.backups.NoBackupList NBL
+	--Дополнительно перед отправкой сверим список исключений в базе 
+	LEFT JOIN backups.NoBackupList NBL
 	ON mb.[Database]=NBL.DBName
 		AND (mb.[Type]=NBL.TypeBackup OR NBL.TypeBackup IS NULL)
 		AND (NBL.ExpDate>cast(getdate() as date) OR NBL.ExpDate IS NULL)

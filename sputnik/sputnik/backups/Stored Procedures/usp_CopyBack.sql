@@ -63,7 +63,7 @@
 			--получаем все настройки бэкапов из БД sputnik и сохраняем в курсор!
 			declare C cursor for
 			select distinct bc.LocalDir, bc.NetDir, bc.DBName, bc.Kind
-			from sputnik.info.vGetAllBackConf bc
+			from info.vGetAllBackConf bc
 			inner join sys.databases sdb on bc.DBName=sdb.[name] and sdb.state_desc='ONLINE'
 			where
 				(@DBFilter is null or bc.DBName=@DBFilter)
@@ -75,7 +75,7 @@
 				declare @BackupFile nvarchar(500);
 				DECLARE @ChainBack TABLE (BackupFile NVARCHAR(800), BackupType VARCHAR(4), ID INT, BackupDate DATETIME2(2));
 				INSERT INTO @ChainBack (BackupFile, BackupType, ID, BackupDate)
-				EXEC sputnik.info.usp_GetChainLogs @DBName=@DBFilter,@FilterBackupID=@FilterBackupID, @top=1, @FromCopy=0, @GetBackupFile=1;
+				EXEC info.usp_GetChainLogs @DBName=@DBFilter,@FilterBackupID=@FilterBackupID, @top=1, @FromCopy=0, @GetBackupFile=1;
 			
 				select top 1 @BackupFile=BackupFile from @ChainBack;
 				if @BackupFile IS NOT NULL AND @BackupFile<>'' 

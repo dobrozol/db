@@ -43,8 +43,8 @@ BEGIN
 		return -1;
 	declare @tsql Nvarchar(2400);
 	--check table ReindexData - failed if it not exists!
-	if object_id('sputnik.db_maintenance.ReindexData') IS NULL begin
-		print('Table [sputnik].[db_maintenance].[ReindexData] not exists!')
+	if object_id('db_maintenance.ReindexData') IS NULL begin
+		print('Table [db_maintenance].[ReindexData] not exists!')
 		return 0
 	end
 	--В отдельном пакете соберём всю исходную информацию о таблицах и индексах по базе данных
@@ -154,7 +154,7 @@ BEGIN
 		exec (@tsql);
 		--Теперь используя команду MERGE синхронизируем информацию по таблицам и индексам между фактическими данными (#T_Source) и таблицей ReindexData
 		MERGE
-			INTO sputnik.db_maintenance.ReindexData AS target
+			INTO db_maintenance.ReindexData AS target
 			USING #T_Source AS source --(DBName, SchemaName, TableName, IndexName, IndexType,SetFillFactor, TableCreateDate, TableModifyDate, PrepareDate, PageCount, AVG_Fragm_percent, LastUpdateStats, LastCommand, LastRunDate,NotRunOnline)
 			ON target.DBName=source.DBName AND target.SchemaName=source.SchemaName AND target.TableName=source.TableName AND target.IndexName=source.IndexName
 			WHEN NOT MATCHED THEN
@@ -188,7 +188,7 @@ BEGIN
 	set @db_id=DB_ID(@db_name_check);
 	--Логгируем в историю Обслуживания БД
 	set @command_text_log='exec [db_maintenance].[usp_reindex_preparedata] @db_name='''+@db_name_check+''';';
-	EXEC sputnik.db_maintenance.usp_WriteHS 
+	EXEC db_maintenance.usp_WriteHS 
 		@DB_ID=@db_id,
 		@Index_Stat_Type=0, --0-Index
 		@Command_Type=4, --4-Prepare data for ReIndex (usp_reindex_preparedata)

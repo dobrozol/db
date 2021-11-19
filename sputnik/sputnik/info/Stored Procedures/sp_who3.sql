@@ -146,10 +146,10 @@ BEGIN
 		ELSE
 		BEGIN
 			SET @time=GETDATE();
-			/* Сбор данных об блокировщиках в две таблицы sputnik.awr.blk_handle_collect и sputnik.awr.sql_text_collect
+			/* Сбор данных об блокировщиках в две таблицы awr.blk_handle_collect и awr.sql_text_collect
 				blk_handle_collect - содержит всю информацию о блокировщиках и блокируемых, кроме текста запроса.
 				sql_text_collect - содержит текст запроса. */
-			IF OBJECT_ID('sputnik.awr.blk_handle_collect') IS NOT NULL AND OBJECT_ID('sputnik.awr.sql_text_collect') IS NOT NULL 
+			IF OBJECT_ID('awr.blk_handle_collect') IS NOT NULL AND OBJECT_ID('awr.sql_text_collect') IS NOT NULL 
 			BEGIN
 				SET XACT_ABORT ON;
 				BEGIN TRAN
@@ -311,7 +311,7 @@ BEGIN
 				ELSE 4*60
 			END;
 			--SELECT 'BusyQuery' as ForZabbix, [Login] as login_name, SPID, command, wait_type, datediff(hour,start_time,@time) as RunningHours
-			SELECT TOP 1 CASE WHEN Count_Big(*)>=1 THEN 'BusyQuery' ELSE 'Its OK' END as ForZabbix, Count_Big(*) as cnt, sputnik.info.uf_FormatTime(SUM(datediff(second,start_time,@time))) as SumDuration, sputnik.info.uf_FormatTime(MAX(datediff(second,start_time,@time))) as MaxDuration
+			SELECT TOP 1 CASE WHEN Count_Big(*)>=1 THEN 'BusyQuery' ELSE 'Its OK' END as ForZabbix, Count_Big(*) as cnt, info.uf_FormatTime(SUM(datediff(second,start_time,@time))) as SumDuration, info.uf_FormatTime(MAX(datediff(second,start_time,@time))) as MaxDuration
 			FROM #qinfo_collect
 			WHERE datediff(minute,start_time,@time) >= @busy_minutes_zabbix
 				and (wait_type<>'SP_SERVER_DIAGNOSTICS_SLEEP' OR wait_type IS NULL)
@@ -353,10 +353,10 @@ BEGIN
 	   
 		ELSE 
 		BEGIN
-			/* Сбор данных об активных запросах в две таблицы sputnik.awr.sql_handle_collect и sputnik.awr.sql_text_collect
+			/* Сбор данных об активных запросах в две таблицы awr.sql_handle_collect и awr.sql_text_collect
 				sql_handle_collect - содержит всю информацию об активных запросах,кроме текста запроса.
 				sql_text_collect - содержит текст запроса. */
-			IF OBJECT_ID('sputnik.awr.sql_handle_collect') IS NOT NULL AND OBJECT_ID('sputnik.awr.sql_text_collect') IS NOT NULL 
+			IF OBJECT_ID('awr.sql_handle_collect') IS NOT NULL AND OBJECT_ID('awr.sql_text_collect') IS NOT NULL 
 			BEGIN
 				SET XACT_ABORT ON;
 				BEGIN TRAN

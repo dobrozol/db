@@ -49,7 +49,7 @@
 	begin
 		set nocount on;	
 		declare @SQLServer nvarchar(510);
-		exec sputnik.info.usp_GetHostname @Servername=@SQLServer OUT;
+		exec info.usp_GetHostname @Servername=@SQLServer OUT;
 		/* Старая версия
 		select 
 			@sqlserver  as ServerName, DB_NAME(database_id) as DBName, mirroring_role_desc as Role, mirroring_state_desc as State, mirroring_partner_instance as PartnerServerName
@@ -64,7 +64,7 @@
 		DECLARE @T_Jobs TABLE (SQLServerName sql_variant, [Job] NVARCHAR(200), [Step] NVARCHAR(1), Info CHAR(1), RUN_STATUS VARCHAR(30), DateTimeRun DateTime, Duration VARCHAR(10));
 		IF @ResState is null
 			insert into @T_Jobs
-			exec sputnik.info.usp_JobMonitor @Activity=1;
+			exec info.usp_JobMonitor @Activity=1;
 
 		Declare @T_Result TABLE (servername nvarchar(1000), DBName nvarchar(2000), [Role] nvarchar(100), [State] nvarchar(100), PartnerServerName nvarchar(1000));
 		insert into @T_Result(servername,DBName,[Role],[State],PartnerServerName)
@@ -96,10 +96,10 @@
 		FROM
 		(
 			SELECT DB --, CASE WHEN [Log]=0 THEN 'XLog' ELSE 'Candidate' END AS [Status] 
-			FROM sputnik.info.vGetQuickBackConf
+			FROM info.vGetQuickBackConf
 			WHERE [state]='ONLINE' AND RecoveryModel='FULL' AND DB NOT IN ('master','msdb','model')
 			--Проверять Зеркало нужно для всех БД, у которых Full Recovery Model (ДАЖЕ ЕСЛИ НЕТ БЭКАПОВ В sputnik). Поэтому след.строка закоментирована:
-			--AND (([Full]=1 OR [FullWeekly]=1) AND ([Log]=1 OR DB IN (SELECT DBName FROM sputnik.backups.BackConf WHERE [Kind] IN ('XLog', 'Log_Secondary'))))		
+			--AND (([Full]=1 OR [FullWeekly]=1) AND ([Log]=1 OR DB IN (SELECT DBName FROM backups.BackConf WHERE [Kind] IN ('XLog', 'Log_Secondary'))))		
 		) DB
 		LEFT JOIN sys.database_mirroring Mir 
 			ON DB.DB=DB_NAME(Mir.database_id)
@@ -127,7 +127,7 @@
 		LEFT JOIN (select REPLACE([Job],'RM ','') as DB,[RUN_STATUS] from @T_Jobs where [Job] LIKE 'RM %') as Jobs
 			ON DB.DB=Jobs.DB-- AND DB.[Status]='XLog'
 		WHERE
-			(Mir.mirroring_state_desc IS NOT NULL OR alwayson_ag.[Role] IS NOT NULL OR DB.DB NOT IN (select DBNameTarget from sputnik.lse.SourceConfig))
+			(Mir.mirroring_state_desc IS NOT NULL OR alwayson_ag.[Role] IS NOT NULL OR DB.DB NOT IN (select DBNameTarget from lse.SourceConfig))
 			AND (@zabbix=0 or (Mir.mirroring_state_desc not in ('SYNCHRONIZING','SYNCHRONIZED')));
 		if @ResState is null or @dbfilter is null
 			select * from @T_Result where (DBName = @dbfilter or @dbfilter is null);

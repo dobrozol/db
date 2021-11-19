@@ -17,7 +17,7 @@
 					По умолчанию 8. Для того, чтобы избежать высокой и постоянной нагрузки на сервере БД.
 
 					18.03.2015 (1.23) Добавлен новая переменная @StandBy_File - для поддержки режима STANDBY (read-only) для восстанавливаемой БД.
-					Это полный путь к файлу отката standby. Соответственно в таблице sputnik.lse.TargetConfig должен быть новый столбец StandBy_File.
+					Это полный путь к файлу отката standby. Соответственно в таблице lse.TargetConfig должен быть новый столбец StandBy_File.
 
 					21.10.2015 (1.25) Добавлена дополнительная проверка и защита - если файл бэкапа не обнаружен в каталоге Копий, то 
 					вызывается его повторное копирование.
@@ -46,32 +46,32 @@
 	AS
 		SET NOCOUNT ON;
 		DECLARE @LocalServer NVARCHAR(510);
-		exec sputnik.info.usp_GetHostname @Servername=@LocalServer OUT;
+		exec info.usp_GetHostname @Servername=@LocalServer OUT;
 		--Получаем настройки для конкретной целевой БД из таблицы настроек lse
 		declare @ServerSource nvarchar(300), @DBNameSource nvarchar(300), @DBNameTarget nvarchar(300), @FromCopy bit, @CatalogFilesDB nvarchar(800), @CatalogLogFiles nvarchar(800), @StandBy_File nvarchar(500)=null,@user_access_desc nvarchar(50), @state_desc nvarchar(100);
 		select  @ServerSource=ServerSource, @DBNameSource=DBNameSource, @DBNameTarget=DBNameTarget, @FromCopy=FromCopy, @CatalogFilesDB=CatalogFilesDB, @CatalogLogFiles=CatalogLogFiles, @StandBy_File=StandBy_File
-		from sputnik.lse.TargetConfig 
+		from lse.TargetConfig 
 		where ID=@ConfigID AND [Suspend]=0 AND [InitDate] IS NOT NULL;
 
 		--Получаем цепочку бэкапов логов для наката!
 		DECLARE @ChainBack TABLE (BackupFile NVARCHAR(800), BackupType VARCHAR(4), ID INT, BackupDate DATETIME2(2));	
 		IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 			INSERT INTO @ChainBack (BackupFile, BackupType, ID, BackupDate)
-				EXEC sputnik.info.usp_GetChainLogs @DBName=@DBNameSource, @BackupFullID=null, @FilterBackupID=@BackupID, @ToDate=null, @fromcopy=@fromcopy;
+				EXEC info.usp_GetChainLogs @DBName=@DBNameSource, @BackupFullID=null, @FilterBackupID=@BackupID, @ToDate=null, @fromcopy=@fromcopy;
 		ELSE
 		BEGIN
 			DECLARE @strP VARCHAR(300);
 			SET @strP='@ToDate=null, @BackupFullID=null, @FilterBackupID='+CAST(@BackupID AS NVARCHAR(40))+', @fromcopy='+CAST(@fromcopy AS VARCHAR(1));
 			INSERT INTO @ChainBack (BackupFile, BackupType, ID, BackupDate)
 				EXEC ('	SELECT *
-						FROM OPENQUERY(['+@ServerSource+'], '' EXEC sputnik.info.usp_GetChainLogs @DBName=N'''''+@DBNameSource+''''','+@strP+';'')
+						FROM OPENQUERY(['+@ServerSource+'], '' EXEC info.usp_GetChainLogs @DBName=N'''''+@DBNameSource+''''','+@strP+';'')
 					 ');
 		END
 		--Восстановление из полученной цепочки бэкапов.
 		declare @str nvarchar(800);
 		DECLARE @BF nvarchar(800), @BT varchar(4), @RestoreStart datetime2(2), @BackupLogID int, @CheckFile bit, @BackupDate datetime2(2);
 		DECLARE RE CURSOR FOR
-			SELECT TOP (@Maxi) BackupFile, BackupType, ID, sputnik.info.uf_CheckFile(BackupFile) as CheckFile, BackupDate
+			SELECT TOP (@Maxi) BackupFile, BackupType, ID, info.uf_CheckFile(BackupFile) as CheckFile, BackupDate
 			FROM @ChainBack
 			--ORDER BY ID;
 		OPEN RE;
@@ -89,7 +89,7 @@
 						SET @strP='@DBFilter=N'''''+@DBNameSource+''''', @FilterBackupID='+CAST(@BackupID AS NVARCHAR(40))+', @Force=1';
 						EXEC ('
 							  EXEC(''
-									EXEC sputnik.backups.usp_CopyBack '+@strP+';
+									EXEC backups.usp_CopyBack '+@strP+';
 							  '') AT ['+@ServerSource+']
 						');
 					end try
@@ -111,7 +111,7 @@
 			begin try
 				set @RestoreStart=sysdatetime();
 				IF @cur_i<@cur_cnt
-					EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+					EXEC [backups].[usp_RestoreDB_simple] 
 						@DBNameTarget=@DBNameTarget, 
 						@FromLog=@BF,
 						@MoveFilesTo=@CatalogFilesDB,
@@ -123,7 +123,7 @@
 						,@NoSetMultiUser=1
 					;
 				ELSE
-					EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+					EXEC [backups].[usp_RestoreDB_simple] 
 						@DBNameTarget=@DBNameTarget, 
 						@FromLog=@BF,
 						@MoveFilesTo=@CatalogFilesDB,
@@ -134,7 +134,7 @@
 						,@StandBy_File=@StandBy_File
 						,@NoSetMultiUser=1
 					;
-				insert into sputnik.lse.HS (config_id, BackupHS_id, StartRestore, CompleteRestore)
+				insert into lse.HS (config_id, BackupHS_id, StartRestore, CompleteRestore)
 				values(@ConfigID, @BackupLogID, @RestoreStart, sysdatetime());
 			end try
 			begin catch
@@ -146,7 +146,7 @@
 				IF @user_access_desc='SINGLE_USER' AND @state_desc='ONLINE'
 					EXEC('ALTER DATABASE ['+@DBNameTarget+'] SET MULTI_USER;');
 				--IF @state_desc<>'ONLINE' AND @StandBy_File IS NOT NULL
-				--	EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+				--	EXEC [backups].[usp_RestoreDB_simple] 
 				--		@DBNameTarget=@DBNameTarget, 
 				--		@NoRecovery=1,
 				--		@NoFileList=1,

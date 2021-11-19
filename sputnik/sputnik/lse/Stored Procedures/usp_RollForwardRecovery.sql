@@ -13,7 +13,7 @@
 					нагрузки на сервер: В очередь сообщения будут добавлены только в том случае, eсли процессорами usp_ExecProcessor
 					сейчас ничего не выполняется + инициализация производится только по одной БД! 
 					18.03.2015 (1.23) Добавлена новая переменная @StandBy_File - для поддержки режима STANDBY (read-only) для восстанавливаемой БД.
-					Это полный путь к файлу отката standby. Соответственно в таблице sputnik.lse.TargetConfig должен быть новый столбец StandBy_File.
+					Это полный путь к файлу отката standby. Соответственно в таблице lse.TargetConfig должен быть новый столбец StandBy_File.
 					30.03.2016 (1.30) Доработка процедуры: Добавлены 2 проверки перед помещением в очередь Service Broker.
 					А также добавлен новый параметр @execute - для того чтобы чётко разделить запуск из Joba (помещения в очередь)
 					и запуски из обработчика очереди Service Broker (здесь как раз @execute=1).
@@ -37,7 +37,7 @@
 			--Накат журналов транзакций для всех БД
 			insert into @tt
 			select distinct DBNameTarget as db
-			from sputnik.lse.TargetConfig
+			from lse.TargetConfig
 			where [suspend]=0 AND [InitDate] is not null
 				AND (DBNameTarget=@DBName OR @DBName IS NULL);
 
@@ -48,7 +48,7 @@
 				--А Инициализация производится только по одной БД (опять же для минимальной нагрузки на сервер)!
 				insert into @tt
 				select TOP 1 DBNameTarget as db
-				from sputnik.lse.TargetConfig
+				from lse.TargetConfig
 				where [suspend]=0 AND [InitDate] is null
 					AND (DBNameTarget=@DBName OR @DBName IS NULL);
 			END
@@ -131,15 +131,15 @@
 			case when c.InitBackupHS_id<h.MaxBackupHS_id then h.MaxBackupHS_id
 				else c.InitBackupHS_id
 			end BackupID
-		from sputnik.lse.TargetConfig c
-		left join (select distinct config_id, max(BackupHS_id) over (partition by config_id) as MaxBackupHS_id from sputnik.lse.HS) h
+		from lse.TargetConfig c
+		left join (select distinct config_id, max(BackupHS_id) over (partition by config_id) as MaxBackupHS_id from lse.HS) h
 			on c.id=h.config_id		
 		where [Suspend]=0 AND [InitDate] IS NOT NULL AND (DBNameTarget=@DBName OR @DBName IS NULL);
 		open LSE;
 		fetch next from LSE into @ConfigID, @CatalogFilesDB, @CatalogLogFiles, @BackupID;
 		while @@FETCH_STATUS=0
 		begin
-			exec sputnik.lse.usp_RunRolling @ConfigID=@ConfigID, @BackupID=@BackupID, @MoveFilesTo=@CatalogFilesDB, @MoveLogFilesTo=@CatalogLogFiles, @pp=@pp;
+			exec lse.usp_RunRolling @ConfigID=@ConfigID, @BackupID=@BackupID, @MoveFilesTo=@CatalogFilesDB, @MoveLogFilesTo=@CatalogLogFiles, @pp=@pp;
 			fetch next from LSE into @ConfigID, @CatalogFilesDB, @CatalogLogFiles, @BackupID;
 		end
 		close LSE;
@@ -147,7 +147,7 @@
 		--Теперь получаем настройки, которые нужно проинициализировать!
 		declare LSE cursor for
 		select ServerSource, DBNameSource, DBNameTarget, FromCopy, CatalogFilesDB, CatalogLogFiles, StandBy_File, COALESCE(UseFreshDiffBack,0) as UseFreshDiffBack 
-		from sputnik.lse.TargetConfig
+		from lse.TargetConfig
 		where [InitDate] is null AND (DBNameTarget=@DBName OR @DBName IS NULL);
 		open LSE;
 		fetch next from LSE into @ServerSource, @DBNameSource, @DBNameTarget, @FromCopy, @CatalogFilesDB, @CatalogLogFiles, @StandBy_File, @UseFreshDiffBack;
@@ -157,13 +157,13 @@
 			if @CatalogFilesDB is NULL and @DBNameSource is not null
 			begin
 				DECLARE @MaxDrive CHAR(1);
-				exec sputnik.info.usp_GetDrives @GetMaxFree=1, @MaxFreeDrive=@MaxDrive OUTPUT;
+				exec info.usp_GetDrives @GetMaxFree=1, @MaxFreeDrive=@MaxDrive OUTPUT;
 				SET @CatalogFilesDB=@MaxDrive+':\DATA\lse\'+@DBNameTarget+'\';
-				UPDATE sputnik.lse.TargetConfig
+				UPDATE lse.TargetConfig
 				SET CatalogFilesDB=@CatalogFilesDB, CatalogLogFiles=NULL 
 				WHERE DBNameTarget=@DBNameTarget;
 			end
-			exec sputnik.backups.usp_GC2 
+			exec backups.usp_GC2 
 				@ServerSource=@ServerSource, @DBNameSource=@DBNameSource, 
 				@DBNameTarget=@DBNameTarget, @FromCopy=@FromCopy, @MoveFilesTo=@CatalogFilesDB, @MoveLogFilesTo=@CatalogLogFiles,
 				@NoRecovery=1,@RunNewBackIfNeed=1, @FreshBack=@UseFreshDiffBack,@lse=1, @pp=@pp, @StandBy_File=@StandBy_File, @RunNewDiffBackIfNeed=@UseFreshDiffBack;

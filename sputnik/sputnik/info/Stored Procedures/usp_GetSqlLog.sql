@@ -58,7 +58,7 @@ BEGIN
 	DECLARE @GD DATETIME2(0)=SYSDATETIME(), @Num TINYINT;
 	declare @SQLServer nvarchar(510);
 	declare @cmd nvarchar(max);
-	exec sputnik.info.usp_GetHostname @Servername=@SQLServer OUT;
+	exec info.usp_GetHostname @Servername=@SQLServer OUT;
 
 	IF @DateStart IS NULL AND @DateEnd IS NULL
 	BEGIN

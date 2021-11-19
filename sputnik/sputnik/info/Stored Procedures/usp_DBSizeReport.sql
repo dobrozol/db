@@ -110,7 +110,7 @@
 		declare @sql NVARCHAR(MAX), @dblist_fmt NVARCHAR(MAX);
 		--Здесь получаем правильное имя SQL Server:
 		declare @servername nvarchar(510);
-		exec sputnik.info.usp_GetHostname @Servername=@Servername OUT;
+		exec info.usp_GetHostname @Servername=@Servername OUT;
 		IF @DBList > N'' AND @DBList IS NOT NULL
 		BEGIN
 			--11.04.17 Новый алгоритм обработки @DBList (список БД в виде строки);

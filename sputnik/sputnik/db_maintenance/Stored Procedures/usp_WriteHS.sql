@@ -30,11 +30,11 @@
 			set @Error_Text_1000=LEFT(@Error_Text_1000,1000);
 
 		BEGIN TRY
-			insert into sputnik.db_maintenance.HS ([DB_ID],[Object_ID],[Index_Stat_ID],[Index_Stat_Type],[Command_Type],[Command_Text_1000],[tt_start],[tt_end],[Status],[Error_Text_1000])
+			insert into db_maintenance.HS ([DB_ID],[Object_ID],[Index_Stat_ID],[Index_Stat_Type],[Command_Type],[Command_Text_1000],[tt_start],[tt_end],[Status],[Error_Text_1000])
 			select COALESCE(@DB_ID,0), @Object_ID, @Index_Stat_ID, @Index_Stat_Type, @Command_Type, @Command_Text_1000, @tt_start, @tt_end, @Status, @Error_Text_1000 ;
 		END TRY
 		BEGIN CATCH
-			SET @StrErr=N'An error occurred while writing to the sputnik.db_maintenance.HS table via the [usp_WriteHS] procedure! Error text: '+COALESCE(ERROR_MESSAGE(),'null *Error message is not defined');
+			SET @StrErr=N'An error occurred while writing to the db_maintenance.HS table via the [usp_WriteHS] procedure! Error text: '+COALESCE(ERROR_MESSAGE(),'null *Error message is not defined');
 			--print @StrErr;
 			--RAISERROR(@StrErr,11,1) WITH LOG;
 			EXEC xp_logevent 55000, @StrErr, ERROR; 

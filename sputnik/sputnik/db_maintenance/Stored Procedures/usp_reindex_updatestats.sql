@@ -113,7 +113,7 @@ BEGIN
 		
 		--Теперь ВСЯ проверка актуальности таблиц и индексов полностью производится в процедуре usp_reindex_preparedata	 			
 		--При этом пересоздания таблиц не происходит, а осуществляется СИНХРОНИЗАЦИЯ данных через MERGE!
-		exec sputnik.db_maintenance.usp_reindex_preparedata @DB_current;
+		exec db_maintenance.usp_reindex_preparedata @DB_current;
 	
 		declare @db_id int, @flag_fail bit, @StrErr varchar(2048), @tt_start datetime2(2), @command_text_log varchar(8000);
 		--Новый алгоритм сбора дополнительной информации по индексам: avg_fragmentation_in_percent и page_count.
@@ -175,7 +175,7 @@ BEGIN
 		select @AvgFrag=cast(MAX(avg_fragmentation_in_percent) as tinyint), @PageCount=sum(page_count)
 		from sys.dm_db_index_physical_stats ('+CAST(@db_id as varchar(100))+','+CAST(@TableID as varchar(100))+','+CAST(@IndexID as varchar(100))+',default,default);
 		--update table [db_maintenance].[ReindexData]';
-				EXEC sputnik.db_maintenance.usp_WriteHS 
+				EXEC db_maintenance.usp_WriteHS 
 					@DB_ID=@db_id,
 					@Object_ID=@TableID,
 					@Index_Stat_ID=@IndexID,
@@ -202,7 +202,7 @@ BEGIN
 
 		--Логгируем в историю Обслуживания БД в конце по всему вызову процедуры:
 		set @command_text_log='exec [db_maintenance].[usp_reindex_updatestats] @db_name='''+@DB_current+''', @rowlimit='+CAST(@rowlimit as varchar(100))+',@delayperiod='''+@delayperiod+''',@oldupdhours='+CAST(@oldupdhours as varchar(100))+',@TableFilter='+CASE WHEN @TableFilter='' THEN 'NULL' ELSE ''''+@TableFilter+'''' END+',@rowlimit_max='+CAST(@rowlimit_max as varchar(100))+';';
-		EXEC sputnik.db_maintenance.usp_WriteHS 
+		EXEC db_maintenance.usp_WriteHS 
 			@DB_ID=@db_id,
 			@Index_Stat_Type=0, --0-Index
 			@Command_Type=5, --5-Update data for ReIndex (usp_reindex_updatestats)

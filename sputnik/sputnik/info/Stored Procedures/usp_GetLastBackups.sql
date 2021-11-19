@@ -31,18 +31,18 @@ BEGIN
 			  LastBackups.backup_finish_date as BackupDate,
 			  CatalogInfo.LocalDir,
 			  CatalogInfo.NetDir,
-			  sputnik.info.uf_checkfile(CatalogInfo.LocalDir) as CheckLocalDir,
-			  sputnik.info.uf_checkfile(CatalogInfo.NetDir) as CheckNetDir,
-			  sputnik.info.uf_checkfile(CatalogInfo.LocalDir + AllBackups.Backup_File+'.BAK') as CheckLocalFile,
-			  sputnik.info.uf_checkfile(CatalogInfo.LocalDir + AllBackups.Backup_File+'.ONLY') as CheckLocalFileOnly, 
-			  sputnik.info.uf_checkfile(CatalogInfo.NetDir + AllBackups.Backup_File+'.BAK') as CheckNetFile
+			  info.uf_checkfile(CatalogInfo.LocalDir) as CheckLocalDir,
+			  info.uf_checkfile(CatalogInfo.NetDir) as CheckNetDir,
+			  info.uf_checkfile(CatalogInfo.LocalDir + AllBackups.Backup_File+'.BAK') as CheckLocalFile,
+			  info.uf_checkfile(CatalogInfo.LocalDir + AllBackups.Backup_File+'.ONLY') as CheckLocalFileOnly, 
+			  info.uf_checkfile(CatalogInfo.NetDir + AllBackups.Backup_File+'.BAK') as CheckNetFile
 		FROM
 		(
 			SELECT [Backup_Type], 
 				MAX(ID) AS [ID],
 				MAX(backup_finish_date) AS [backup_finish_date]
 			FROM
-				[sputnik].[backups].[BackupHistory] bh
+				[backups].[BackupHistory] bh
 			WHERE
 				(@DBName IS NULL OR [DB_Name]=@DBName)
 				AND (@CheckOnline=0 OR [DB_Name] IN (select name from sys.databases where [state]=0 and is_read_only=0))
@@ -51,9 +51,9 @@ BEGIN
 			GROUP BY [DB_Name], [Backup_Type]
 		) LastBackups
 		INNER JOIN
-			[sputnik].[backups].[BackupHistory] AllBackups ON LastBackups.ID=AllBackups.ID
+			[backups].[BackupHistory] AllBackups ON LastBackups.ID=AllBackups.ID
 		CROSS APPLY
-			sputnik.info.uf_GetBackConf(AllBackups.[DB_Name], LastBackups.Backup_Type, AllBackups.backup_start_date) AS CatalogInfo
+			info.uf_GetBackConf(AllBackups.[DB_Name], LastBackups.Backup_Type, AllBackups.backup_start_date) AS CatalogInfo
 	)
 	SELECT 
 		[DB_name],Backup_Type,BackupFile,ID,BackupDate,

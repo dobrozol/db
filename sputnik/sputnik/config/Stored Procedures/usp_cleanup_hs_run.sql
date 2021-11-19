@@ -28,7 +28,7 @@
 			set @top_cmd=' TOP ('+cast(@top as varchar(40))+') ';
 		DECLARE Cl CURSOR FOR
 		SELECT SchemaName,TableName,Column_filter,interval_type,interval
-		FROM sputnik.config.cleanup_hs;
+		FROM config.cleanup_hs;
 		OPEN Cl;
 		FETCH NEXT FROM Cl INTO @SN, @TN, @CF, @IT, @I;
 		WHILE @@FETCH_STATUS=0
