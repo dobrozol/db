@@ -259,6 +259,7 @@
     <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac">
       <HintPath>C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac</HintPath>
       <DatabaseSqlCmdVariable>tempdb</DatabaseSqlCmdVariable>
+      <SuppressMissingDependenciesErrors>True</SuppressMissingDependenciesErrors>
     </ArtifactReference>
     <ArtifactReference Include="$(DacPacRootPath)\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SqlSchemas\msdb.dacpac">
       <HintPath>$(DacPacRootPath)\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SqlSchemas\msdb.dacpac</HintPath>
