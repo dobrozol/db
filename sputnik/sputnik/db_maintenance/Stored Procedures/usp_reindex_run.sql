@@ -327,12 +327,8 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' rebuild with ( sort_in_tempdb = '+@set_sortintempdb+', online = '+@check_set_online+@walp_option+N' , data_compression = '+@set_compression+', fillfactor='+cast(@set_fillfactor as varchar(5))+CASE WHEN @Ed='Ent' THEN ', MAXDOP = '+cast(@MaxDop_set as varchar(5)) ELSE '' END+')';
 
 					end
-					exec [db_maintenance].[usp_addAppLockToCommand]
-						@dbName = @DB_Current,
-						@schemaName = @SchemaName,
-						@objectName = @TableName,
-						@command = @command,
-						@resultCommand = @commandWithAppLock output;
+					select @commandWithAppLock = resultCommand
+					from [db_maintenance].[uf_addAppLockCommand] (@DB_Current, @SchemaName, @TableName, @command, default);
 
 					set @tsql=@tsql_handle+N'
 	use '+QUOTENAME(@DB_current)+';
