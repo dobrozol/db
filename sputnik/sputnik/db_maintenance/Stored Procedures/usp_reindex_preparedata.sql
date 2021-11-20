@@ -27,9 +27,11 @@
 				14.12.2016 (2.030)
 				Изменена таблица ReindexData и добавлен алгоритм логгирования в таблицу HS.
 				16.11.2021 (2.040) added NoReorganize parameter - if page-level locks are disabled in the index
+				20.11.2021 (2.045) added check for repeated updating of information on non-processed indexes
 -- ============================================= */
 CREATE PROCEDURE db_maintenance.usp_reindex_preparedata
-	@db_name nvarchar(300)
+	@db_name nvarchar(300),
+	@updateLagInHours smallint = 24	--delay in hours for re-updating information for non-processed indexes
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -170,7 +172,12 @@ BEGIN
 					target.TableID<>source.TableID OR target.IndexID<>source.IndexID OR target.IndexType<>source.IndexType
 					OR target.SetFillFactor<>source.SetFillFactor OR target.TableCreateDate<>source.TableCreateDate
 					OR target.TableModifyDate<>source.TableModifyDate OR target.NotRunOnline<>source.NotRunOnline
-					OR target.NoReorganize<>source.NoReorganize
+					OR target.NoReorganize<>source.NoReorganize 
+				) 
+				--updating information only for already processed indexes or if more than @updateLagInHours have passed since the last update of information
+				AND (
+					target.LastUpdateStats is null or target.LastUpdateStats < target.LastRunDate
+					or datediff(hour,target.LastUpdateStats,@tt_start)>@updateLagInHours
 				)
 			THEN
 				UPDATE SET

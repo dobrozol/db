@@ -9,7 +9,7 @@
 				Параметр @countexec - количество подходов (раз) выполнения с заданными настройками. По умолчанию 50 раз.
 				Параметр @delayperiod - определяет временную задержку в формате строки 00:00:00, перед запуском обработки следующих строк. По умолчанию 06 сек.
 				Эти 3 параметра необходимы, чтобы минимизировать нагрузку на SQL Server.
-				Параметр @oldupdhours - определяет количество часов, после которых информация считается устаревшей и требуется обновление! По умолчанию 6 часов.
+				Параметр @updateLagInHours - определяет количество часов, после которых информация считается устаревшей и требуется обновление! По умолчанию 6 часов.
 -- Update:		15.01.2014 (1.1)
 				Добавлен алгоритм предварительной проверки найденных строк. Если найденных строк нет, то выполнение прерывается.
 				24.01.2014 (1.15)
@@ -21,9 +21,9 @@
 				25.02.2014 (1.5)
 				Добавлено условие в отбор индексов - только Включенные индексы отбирать.
 				26.02.2014 (1.55)
-				Изменен параметр @oldupdate на @oldupdhours - теперь возраст статистики будет проверяться в часах, а не в днях. Значение по умолчанию 6 часов.
+				Изменен параметр @oldupdate на @updateLagInHours - теперь возраст статистики будет проверяться в часах, а не в днях. Значение по умолчанию 6 часов.
 				27.02.2014 (1.56)
-				Значение по умолчанию для параметра @oldupdhours уменьшено с 6 до 3 часов.
+				Значение по умолчанию для параметра @updateLagInHours уменьшено с 6 до 3 часов.
 				05.03.2014 (1.57)
 				Добавлена настройка сеанса Низкий приоритет взаимоблокировки и READ UNCOMMITTED в качестве уровня изоляции транзакций.
 				Также размер тектовой переменной @tsql увеличен до 2400.
@@ -31,7 +31,7 @@
 				Изменено значение по умолчанию для параметра @delayperiod с 6 до 2 сек.
 				15.10.2014 (1.6)
 				Добавлен новый параметр @TableFilter - теперь можно запустить принудительно сбор статистик для конкретной таблицы.
-				При этом значение параметра @oldupdhours не учитывается!
+				При этом значение параметра @updateLagInHours не учитывается!
 				24.06.2015 (2.0)
 				Совершенно новый алгоритм сбора дополнительной информации по индексам. Вся проверка актуальности производиться 
 				в процедуре usp_reindex_preparedata. Вся информация сохраняется в одну таблицу ReindexData.
@@ -39,12 +39,14 @@
 				указанное кол-во статистик.
 				14.12.2016 (2.020)
 				Новый алгоритм сбора информации и логгирования в таблицу HS.
+				20.11.2021 (2.025)
+				[LastRunStartTime] field clearing was added
 -- ============================================= */
 CREATE PROCEDURE db_maintenance.usp_reindex_updatestats
 	@db_name nvarchar(300) = NULL,
 	@rowlimit int = 50,
 	@delayperiod char(12) = '00:00:00:500',
-	@oldupdhours tinyint = 3,
+	@updateLagInHours smallint = 24,
 	@TableFilter nvarchar(300)=null,
 	@rowlimit_max bigint = 1000000
 AS
@@ -63,7 +65,7 @@ BEGIN
 	--	return -1;
 
 	if @TableFilter is not null
-		set @oldupdhours=0;
+		set @updateLagInHours=0;
 	else
 		set @TableFilter='';
 
@@ -127,7 +129,7 @@ BEGIN
 			DBName=QUOTENAME(@DB_current)
 			and (@TableFilter = '' or TableName= QUOTENAME(@TableFilter))
 			and ([LastUpdateStats] is null or [LastRunDate]>[LastUpdateStats]
-				or DATEDIFF(HOUR,[LastUpdateStats],getdate())>=@oldupdhours)
+				or DATEDIFF(HOUR,[LastUpdateStats],getdate())>@updateLagInHours)
 		order by [LastUpdateStats] ASC;
 		open C
 		fetch next from C into @IndexID, @TableID
@@ -147,21 +149,14 @@ BEGIN
 					@RowSize_Kb=cast (max(avg_record_size_in_bytes)/1024.00 as numeric(9,3))
 				from sys.dm_db_index_physical_stats (@db_id, @TableID, @IndexID,NULL,'SAMPLED');
 
-				--select @AvgFrag,@Avg_Page_Used,@PageCount,@Row_cnt,@RowSize_Kb
-				--select @DB_current,@TableID,@IndexID;
-				--select [AVG_Fragm_percent],[PageCount],[~PageUsed_perc],[~Row_cnt],[~RowSize_Kb],[LastUpdateStats]
-				--from [db_maintenance].[ReindexData] 
-				--where DBName=@DB_current
-				--	and TableID=@TableID
-				--	and IndexID=@IndexID; 
-
 				update [db_maintenance].[ReindexData] 
 				set [AVG_Fragm_percent]=@AvgFrag,
 					[PageCount]=@PageCount,
 					[~PageUsed_perc]=@Avg_Page_Used,
 					[~Row_cnt]=@Row_cnt,
 					[~RowSize_Kb]=@RowSize_Kb,
-					[LastUpdateStats]=getdate()
+					[LastUpdateStats]=getdate(),
+					[LastRunStartTime]=null
 				where 
 					DBName=QUOTENAME(@DB_current)
 					and TableID=@TableID
@@ -201,7 +196,7 @@ BEGIN
 		deallocate C;
 
 		--Логгируем в историю Обслуживания БД в конце по всему вызову процедуры:
-		set @command_text_log='exec [db_maintenance].[usp_reindex_updatestats] @db_name='''+@DB_current+''', @rowlimit='+CAST(@rowlimit as varchar(100))+',@delayperiod='''+@delayperiod+''',@oldupdhours='+CAST(@oldupdhours as varchar(100))+',@TableFilter='+CASE WHEN @TableFilter='' THEN 'NULL' ELSE ''''+@TableFilter+'''' END+',@rowlimit_max='+CAST(@rowlimit_max as varchar(100))+';';
+		set @command_text_log='exec [db_maintenance].[usp_reindex_updatestats] @db_name='''+@DB_current+''', @rowlimit='+CAST(@rowlimit as varchar(100))+',@delayperiod='''+@delayperiod+''',@updateLagInHours='+CAST(@updateLagInHours as varchar(100))+',@TableFilter='+CASE WHEN @TableFilter='' THEN 'NULL' ELSE ''''+@TableFilter+'''' END+',@rowlimit_max='+CAST(@rowlimit_max as varchar(100))+';';
 		EXEC db_maintenance.usp_WriteHS 
 			@DB_ID=@db_id,
 			@Index_Stat_Type=0, --0-Index

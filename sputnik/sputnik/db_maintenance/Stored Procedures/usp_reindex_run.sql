@@ -79,6 +79,8 @@
 					added managed locks for multithreading.
 					17.11.2021 (3.040) 
 					refactoring, fixing and adding new value for parameter @policy_offline
+					20.11.2021 (3.042) 
+					the LastRunStartTime field will be used to split objects in multi-threaded mode
 	-- ============================================= */
 	CREATE PROCEDURE [db_maintenance].[usp_reindex_run]
 		@db_name nvarchar(2000)=NULL,
@@ -190,45 +192,60 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 		FETCH NEXT FROM DB INTO @DB_current;
 		WHILE @@FETCH_STATUS=0
 		BEGIN
-			;with cte_src_1 as
-			(
-				select top (@rowlimit) 
-					SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline
-					,CAST( 
-							([AVG_Fragm_percent])
-							+ (100-[~PageUsed_perc])
-							+ (cast([PageCount] as numeric(19,6)) / case when MAX ([PageCount]) over ()=0 then 1 else MAX ([PageCount]) over () end * 10)
-							+ (datediff(day,LastRunDate,[LastUpdateStats])*[AVG_Fragm_percent]*0.01) 
-							- (cast([ReindexCount] as numeric(19,6)) / case when MAX (ReindexCount) over ()=0 then 1 else MAX (ReindexCount) over () end * 10)
-							as numeric(19,6)) as qt,
-					[TableID] as obj_id, [IndexID] as ind_id,
-					[~PageUsed_perc] as PageU_prc,
-					[NoReorganize]
-				from 
-					[db_maintenance].[ReindexData]
-				where 
-					DBName=QUOTENAME(@DB_current)
-					and (@TableFilter='' or TableName=QUOTENAME(@TableFilter))
-					and CHARINDEX(TableName+';',@StopList_str)=0
-					and ([LastUpdateStats] is not null or @fragm_tresh<0)
-					and ([PageCount] is not null and (@filter_pages_min is null or [PageCount] >= @filter_pages_min))
-					and ([PageCount] is not null and (@filter_pages_max is null or [PageCount] <= @filter_pages_max))
-					and (
-							(
-								(AVG_Fragm_percent is not null and (@filter_fragm_min is null or AVG_Fragm_percent >= @filter_fragm_min))
-								OR ([~PageUsed_perc]<@PageUsed_tresh AND AVG_Fragm_percent>0)
+			begin tran
+				;with cte_src_1 as
+				(
+					select top (@rowlimit) 
+						SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline
+						,CAST( 
+								([AVG_Fragm_percent])
+								+ (100-[~PageUsed_perc])
+								+ (cast([PageCount] as numeric(19,6)) / case when MAX ([PageCount]) over ()=0 then 1 else MAX ([PageCount]) over () end * 10)
+								+ (datediff(day,LastRunDate,[LastUpdateStats])*[AVG_Fragm_percent]*0.01) 
+								- (cast([ReindexCount] as numeric(19,6)) / case when MAX (ReindexCount) over ()=0 then 1 else MAX (ReindexCount) over () end * 10)
+								as numeric(19,6)) as qt,
+						[TableID] as obj_id, [IndexID] as ind_id,
+						[~PageUsed_perc] as PageU_prc,
+						[NoReorganize]
+					from 
+						[db_maintenance].[ReindexData]
+					where 
+						DBName=QUOTENAME(@DB_current)
+						and (@TableFilter='' or TableName=QUOTENAME(@TableFilter))
+						and CHARINDEX(TableName+';',@StopList_str)=0
+						and ([LastUpdateStats] is not null or @fragm_tresh<0)
+						and ([PageCount] is not null and (@filter_pages_min is null or [PageCount] >= @filter_pages_min))
+						and ([PageCount] is not null and (@filter_pages_max is null or [PageCount] <= @filter_pages_max))
+						and (
+								(
+									(AVG_Fragm_percent is not null and (@filter_fragm_min is null or AVG_Fragm_percent >= @filter_fragm_min))
+									OR ([~PageUsed_perc]<@PageUsed_tresh AND AVG_Fragm_percent>0)
+								)
+								AND (AVG_Fragm_percent is not null and (@filter_fragm_max is null or AVG_Fragm_percent <= @filter_fragm_max))				
 							)
-							AND (AVG_Fragm_percent is not null and (@filter_fragm_max is null or AVG_Fragm_percent <= @filter_fragm_max))				
-						)
-					and (LastRunDate is null or (@filter_old_hours is null or DATEDIFF(HOUR,[LastRunDate],getdate()) >= @filter_old_hours))
-					and (LastRunDate is null or (LastUpdateStats > LastRunDate) or @fragm_tresh<0)
-				order by qt desc
-			)
-			insert into #T_RI (DB, SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt,[NoReorganize])
-			select
-					@DB_current,SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt,[NoReorganize]
-			from 
-				cte_src_1;
+						and (LastRunDate is null or (@filter_old_hours is null or DATEDIFF(HOUR,[LastRunDate],getdate()) >= @filter_old_hours))
+						and (LastRunDate is null or (LastUpdateStats > LastRunDate) or @fragm_tresh<0)
+						and datediff(hour,isnull(LastRunStartTime, '1900-01-01'),getdate())>=case when isnull(@filter_old_hours,0) < 1 then 1 else @filter_old_hours end
+					order by qt desc
+				)
+				insert into #T_RI (DB, SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt,[NoReorganize])
+				select
+						@DB_current,SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt,[NoReorganize]
+				from 
+					cte_src_1;
+				update [db_maintenance].[ReindexData]
+					set [LastRunStartTime] = getdate()
+				from (
+					select distinct [SchemaName], obj_id, ind_id
+					from #T_RI
+					where DB = @DB_current
+				)src
+				,[db_maintenance].[ReindexData] r
+				where r.DBName = QUOTENAME(@DB_current)
+					and r.[SchemaName] = src.SchemaName
+					and r.[TableID] = src.obj_id
+					and r.[IndexID] = src.ind_id;
+			commit
 		
 			FETCH NEXT FROM DB INTO @DB_current;
 		END

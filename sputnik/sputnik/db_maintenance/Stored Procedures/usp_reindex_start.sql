@@ -32,6 +32,8 @@
 					14.11.2018 (2.110) Добавлена совместимость с 2008 версией (iif заменены на case).
 					13.11.2021 (2.112) maxdop option was added for using in reindex operations
 					17.11.2021 (2.113) policy_offline option was added for using in reindex operations
+					20.11.2021 (2.115) option @updateLagInHours getting from config was added
+					20.11.2021 (2.120) added saving information from ReindexData to ReindexReport (exec usp_saveReindexReport)
 	-- ============================================= */
 	CREATE PROCEDURE db_maintenance.usp_reindex_start
 		@DBFilter nvarchar(2000) = null,
@@ -47,7 +49,8 @@
 		@filter_fragm_min tinyint, @filter_fragm_max tinyint, @filter_old_hours tinyint, 
 		@fragm_tresh tinyint, @set_fillfactor tinyint, @set_compression char(4), @set_online char(3), @set_sortintempdb char(3), @PauseMirroring bit,
 		@DeadLck_PR smallint, @Lck_Timeout int, @filter_rows_min int, @filter_rows_max int, @filter_perc_min decimal(18,2), @filter_perc_max decimal(18,2),
-		@policy_scan varchar(100), @timeout_sec int, @set_maxdop smallint, @walp_max_duration smallint, @walp_abort_after_wait varchar(20), @policy_offline tinyint;
+		@policy_scan varchar(100), @timeout_sec int, @set_maxdop smallint, @walp_max_duration smallint, @walp_abort_after_wait varchar(20), @policy_offline tinyint,
+		@updateLagInHours smallint;
 		declare @mv_Name nvarchar(200);
 		declare @filter_DataUsedMb_min numeric(9,1), @filter_DataUsedMb_max numeric(9,1);
 		set @getdate=GETDATE();
@@ -79,6 +82,9 @@
 
 		if @StartRecomputeStats=0
 		BEGIN
+			--before update information for ReindexData saving to ReindexReport
+			if @StartUpdateStats = 1
+				exec [db_maintenance].[usp_saveReindexReport];
 			--Определяем настройки Реиндексации на основании окна обслуживания!
 			--Проверяем что эти базы существуют, и их состояние ONLINE, и это не системные БД!
 			declare INDEXs cursor
@@ -109,6 +115,7 @@
 							,[walp_max_duration]
 							,[walp_abort_after_wait]
 							,[policy_offline]
+							,[updateLagInHours]
 					from db_maintenance.ReindexConf
 					where
 						(@DBFilter is null or DBName=@DBFilter)
@@ -175,7 +182,7 @@
 			fetch next from INDEXs
 				into @DBName, @UniqueName_SL, @RowLimit, @delayperiod, @filter_pages_min, @filter_pages_max, @filter_fragm_min, @filter_fragm_max,
 					@filter_old_hours, @fragm_tresh, @set_fillfactor, @set_compression, @set_online, @set_sortintempdb, @PauseMirroring, @DeadLck_PR,
-					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait, @policy_offline;
+					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait, @policy_offline, @updateLagInHours;
 			while @@FETCH_STATUS=0
 			begin
 				if @StartUpdateStats=0
@@ -205,25 +212,22 @@
 						@policy_offline = @policy_offline;
 				else
 				BEGIN
-					--Запуск Сбора статистик(информации) по индексам и таблицам!
-					--Указываем @oldupdhours=3 - означает, что обновляем только те данные, которые старше 3 часов.
-					--@rowlimit_max=1000 - за 1 запуск обновляем только 1000 самых устаревших статистик .
-				
-					--для отладки
-					--select @DBName as DBName, @rowlimit as rowlimit, @delayperiod as DelayPeriod,
-					--	   3 as OldUpdhours, @TableFilter as TableFilter;
+					-- Start collecting statistics (information) on indexes and tables!
+					-- Specify @updateLagInHours to update only data older than @updateLagInHours hours.
+					-- @rowlimit_max = 5000 - for 1 launch we update only 5000 of the most outdated statistics.
+
 					exec db_maintenance.usp_reindex_updatestats 
 						@db_name=@DBName, 
 						@rowlimit=@rowlimit,
 						@delayperiod=@delayperiod,
-						@oldupdhours=3,
+						@updateLagInHours=@updateLagInHours,
 						@TableFilter=@TableFilter,
-						@rowlimit_max=3000;
+						@rowlimit_max=5000;
 				END
 				fetch next from INDEXs
 				into @DBName, @UniqueName_SL, @RowLimit, @delayperiod, @filter_pages_min, @filter_pages_max, @filter_fragm_min, @filter_fragm_max,
 					@filter_old_hours, @fragm_tresh, @set_fillfactor, @set_compression, @set_online, @set_sortintempdb, @PauseMirroring, @DeadLck_PR,
-					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait, @policy_offline;
+					@Lck_Timeout,@timeout_sec, @set_maxdop, @walp_max_duration, @walp_abort_after_wait, @policy_offline, @updateLagInHours;
 			end;
 			CLOSE INDEXs;
 			DEALLOCATE INDEXs;

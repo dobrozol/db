@@ -20,6 +20,7 @@
     [LastRunDate]       DATETIME2 (2)  NULL,
     [ReindexCount]      INT            DEFAULT ((0)) NULL,
     [NotRunOnline]      BIT            DEFAULT ((0)) NULL,
-    [NoReorganize]      BIT            DEFAULT ((0)) NULL
+    [NoReorganize]      BIT            DEFAULT ((0)) NULL,
+    [LastRunStartTime]  DATETIME2 (2)  NULL  --shows when the reindex was last started, сleared when running reindex_updatestats, used for multi-threaded mode
 );
 
