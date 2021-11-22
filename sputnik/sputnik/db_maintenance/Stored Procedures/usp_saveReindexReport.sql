@@ -22,9 +22,11 @@ BEGIN
 			[AVG_Fragm_percent], [~PageUsed_perc], [ReindexCount]
 		into #src
 		from [db_maintenance].[ReindexData]
-		where [LastUpdateStats] > @lastReportTime
+		where [PageCount] >= 0 and [AVG_Fragm_percent] between 0 and 100 and [~PageUsed_perc] between 0 and 100 and (
+			[LastUpdateStats] > @lastReportTime
 			or @lastReportTime is null
-			or @modeIncremental = 0;
+			or @modeIncremental = 0
+		);
 
 		select 'Index fragmentation %' as metricName,
 			case 
