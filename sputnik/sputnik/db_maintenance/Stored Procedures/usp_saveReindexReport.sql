@@ -6,7 +6,7 @@
 
 -- ============================================= */
 CREATE PROCEDURE [db_maintenance].[usp_saveReindexReport]
-	@modeIncremental bit = 1
+	@modeIncremental bit = 0
 AS
 BEGIN
 	set nocount on;
