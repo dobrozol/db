@@ -28,6 +28,7 @@
 				Изменена таблица ReindexData и добавлен алгоритм логгирования в таблицу HS.
 				16.11.2021 (2.040) added NoReorganize parameter - if page-level locks are disabled in the index
 				20.11.2021 (2.045) added check for repeated updating of information on non-processed indexes
+				23.11.2021 (2.046) set NoReorganize if lob used in index
 -- ============================================= */
 CREATE PROCEDURE db_maintenance.usp_reindex_preparedata
 	@db_name nvarchar(300),
@@ -101,8 +102,9 @@ BEGIN
 				when LOB.index_id is not null then 1
 			end as NotRunOnline,
 			case 
-				when I.allow_page_locks > 0 then 0
-				else 1
+				when I.allow_page_locks < 1 then 1
+				when LOB.index_id is not null then 1
+				else 0
 			end as NoReorganize
 		from
 			(
