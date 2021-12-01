@@ -81,6 +81,8 @@
 					refactoring, fixing and adding new value for parameter @policy_offline
 					20.11.2021 (3.042) 
 					the LastRunStartTime field will be used to split objects in multi-threaded mode
+					01.12.2021 (3.043)
+					rebuild offline fixed, add exclude mode by schema name from stop list
 	-- ============================================= */
 	CREATE PROCEDURE [db_maintenance].[usp_reindex_run]
 		@db_name nvarchar(2000)=NULL,
@@ -144,6 +146,9 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 		--Далее получаем индексы для обслуживания и формируем команды для обслуживания, и выполняем их по очереди в отдельном пакете.
 		declare @SchemaName nvarchar(2000), @TableName nvarchar(2000), @IndexName nvarchar(2000), @PageCount int, @AVG_Fragm_percent tinyint,@NotRunOnline bit, @NoReorganize bit;
 		declare @command nvarchar(MAX), @check_set_online char(3), @PageU_prc tinyint, @i_cnt bigint=0,@i_cnt_skip bigint=0;
+		
+		set @check_set_online=case @Ed when 'Ent' then @set_online else 'OFF' end;
+		
 		--declare @T_i table (SchemaName nvarchar(300),TableName nvarchar(300),IndexName nvarchar(300), obj_id int, ind_id int, [PageCount] bigint,AVG_Fragm_percent tinyint,PageU_prc tinyint,NotRunOnline bit);
 		IF OBJECT_ID('tempdb.dbo.#T_RI') IS NOT NULL
 			DROP TABLE #T_RI;
@@ -213,6 +218,7 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 						DBName=QUOTENAME(@DB_current)
 						and (@TableFilter='' or TableName=QUOTENAME(@TableFilter))
 						and CHARINDEX(TableName+';',@StopList_str)=0
+						and CHARINDEX(concat('schema=[',SchemaName,'];'),@StopList_str)=0	--exclude table by schema from stop list
 						and ([LastUpdateStats] is not null or @fragm_tresh<0)
 						and ([PageCount] is not null and (@filter_pages_min is null or [PageCount] >= @filter_pages_min))
 						and ([PageCount] is not null and (@filter_pages_max is null or [PageCount] <= @filter_pages_max))
@@ -309,7 +315,6 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 				if (isnull(@MaxDop,-1)<0)
 					exec @MaxDop_set = [db_maintenance].[usp_getMaxDop] @PageCount;
 
-				set @check_set_online=case @Ed when 'Ent' then @set_online else 'OFF' end;
 				IF (@check_set_online='ON' and @NotRunOnline=1 and (@policy_offline=0 or (@policy_offline=2 and @NoReorganize=1)))
 				BEGIN
 					--Пропустить этот индекс
@@ -319,9 +324,6 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 				END
 				ELSE BEGIN
 	
-					if @check_set_online='ON' and @NotRunOnline=1 and (@policy_offline=1 or (@policy_offline=3 and @NoReorganize=1))
-						set @check_set_online='OFF';	
-						
 					--rebuild делаем только если фрагментация меньше @fragm_tresh и если заполненость страницы более чем @PageUsed_tresh
 					--в остальных случаях нужен reorginize!
 					if (
@@ -332,8 +334,11 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' reorganize ';
 						set @command_type=2;
 					end
-					else if @AVG_Fragm_percent > @fragm_tresh OR (@PageU_prc<@PageUsed_tresh and @AVG_Fragm_percent>0)
+					else
 					begin
+						if @check_set_online='ON' and @NotRunOnline=1
+							set @check_set_online='OFF';	
+
 						if @check_set_online='ON' begin
 							set @command_type=1;
 							if isnull(@walp_max_duration,-1)>0
