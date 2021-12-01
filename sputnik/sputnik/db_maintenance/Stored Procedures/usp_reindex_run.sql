@@ -218,7 +218,7 @@ SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 						DBName=QUOTENAME(@DB_current)
 						and (@TableFilter='' or TableName=QUOTENAME(@TableFilter))
 						and CHARINDEX(TableName+';',@StopList_str)=0
-						and CHARINDEX(concat('schema=[',SchemaName,'];'),@StopList_str)=0	--exclude table by schema from stop list
+						and CHARINDEX(concat('schema=',SchemaName,';'),@StopList_str)=0	--exclude table by schema from stop list
 						and ([LastUpdateStats] is not null or @fragm_tresh<0)
 						and ([PageCount] is not null and (@filter_pages_min is null or [PageCount] >= @filter_pages_min))
 						and ([PageCount] is not null and (@filter_pages_max is null or [PageCount] <= @filter_pages_max))
