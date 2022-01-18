@@ -22,7 +22,7 @@
 		FROM
 		(
 			SELECT name as DB, state_desc as state, recovery_model_desc as RecoveryModel
-			FROM SYS.DATABASES
+			FROM [master].SYS.DATABASES
 			WHERE state=0 AND is_read_only=0 AND name not in (/*'model',*/ 'tempdb')
 				AND (name NOT LIKE '201%(%)%' and name NOT LIKE 'S201%(%)%')
 		) as D

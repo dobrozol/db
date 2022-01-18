@@ -17,6 +17,11 @@
     [PauseMirroring]   BIT            DEFAULT ((0)) NOT NULL,
     [DeadLck_PR]       SMALLINT       DEFAULT ((0)) NOT NULL,
     [Lck_Timeout]      INT            DEFAULT ((20000)) NOT NULL,
-    [timeout_sec]      INT            NULL
+    [timeout_sec]      INT            NULL,
+    [set_maxdop]       SMALLINT       NULL, --set maxdop for reindex operation
+    [walp_max_duration]     SMALLINT  NULL, --option WAIT_AT_LOW_PRIORITY parameter MAX_DURATION (in minutes). NULL - this option will not use
+    [walp_abort_after_wait] VARCHAR(20) DEFAULT ('NONE') NOT NULL, --option WAIT_AT_LOW_PRIORITY parameter ABORT_AFTER_WAIT (NONE, SELF, BLOCKERS)
+    [policy_offline]   TINYINT        DEFAULT (3), --Determines what to do if online rebuild is not possible: 0-skip, 1-offline rebuild, 2-reorganize, 3-reorganize or offline rebuild.
+    [updateLagInHours] SMALLINT       DEFAULT (24) NOT NULL --delay in hours for re-updating information for non-processed indexes
 );
 

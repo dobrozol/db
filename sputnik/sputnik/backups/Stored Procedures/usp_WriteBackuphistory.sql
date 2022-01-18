@@ -8,7 +8,7 @@
 	as
 	begin
 		set nocount on;
-		insert into sputnik.backups.BackupHistory (DB_Name,FG,Backup_Type,Backup_File,backup_start_date,backup_finish_date,first_LSN,last_LSN,database_backup_LSN,diff_base_LSN,backup_size_Mb,backup_compress_ratio)
+		insert into backups.BackupHistory (DB_Name,FG,Backup_Type,Backup_File,backup_start_date,backup_finish_date,first_LSN,last_LSN,database_backup_LSN,diff_base_LSN,backup_size_Mb,backup_compress_ratio)
 		select 
 			@db_name, case when @fg='' then NULL else @fg end as FG, @backup_type, @backup_file, 
 			BS.backup_start_date,BS.backup_finish_date,BS.first_LSN,BS.last_lsn,BS.database_backup_LSN,BS.differential_base_lsn,

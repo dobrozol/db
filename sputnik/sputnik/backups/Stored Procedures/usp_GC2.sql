@@ -104,11 +104,11 @@
 		DECLARE @TT TABLE ([DB_name] NVARCHAR(400), Backup_Type VARCHAR(4), BackupFile NVARCHAR(500), ID INT, BackupDate DATETIME2(2), LocalDir NVARCHAR(500), NetDir NVARCHAR(500), CheckLocalDir BIT, CheckNetDir BIT, CheckLocalFile BIT, CheckLocalFileOnly BIT, CheckNetFile BIT);
 		IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 			INSERT INTO @TT
-				EXEC sputnik.info.usp_GetLastBackups @DBName=@DBNameSource, @ToDate=@ToDate;
+				EXEC info.usp_GetLastBackups @DBName=@DBNameSource, @ToDate=@ToDate;
 		ELSE
 			INSERT INTO @TT
 				EXEC ('	SELECT *
-						FROM OPENQUERY(['+@ServerSource+'], '' EXEC sputnik.info.usp_GetLastBackups @DBName=N'''''+@DBNameSource+''''', @ToDate='+@pToDate+';'')
+						FROM OPENQUERY(['+@ServerSource+'], '' EXEC info.usp_GetLastBackups @DBName=N'''''+@DBNameSource+''''', @ToDate='+@pToDate+';'')
 					 ');
 		SELECT @BackupFullID=ID, @BackupFullFinishDate=BackupDate,  
 			@FullPath=case when @FromCopy=0 OR NetDir is null OR NetDir='' then LocalDir+BackupFile else NetDir+BackupFile end
@@ -120,11 +120,11 @@
 		IF @FullPath IS NULL AND @RunNewBackIfNeed=1 AND @ToDate IS NULL
 			begin try	
 				IF @ServerSource IS NULL OR @ServerSource=@LocalServer
-					EXEC sputnik.backups.usp_RunBack @DBName_in=@DBNameSource, @TypeBack='Full', @OnlyFull=1, @ForceCopy=1;
+					EXEC backups.usp_RunBack @DBName_in=@DBNameSource, @TypeBack='Full', @OnlyFull=1, @ForceCopy=1;
 				ELSE
 					EXEC ('
 						  EXEC(''
-								EXEC sputnik.backups.usp_RunBack @DBName_in=N'''''+@DBNameSource+''''', @TypeBack=''''Full'''', @OnlyFull=1, @ForceCopy=1;
+								EXEC backups.usp_RunBack @DBName_in=N'''''+@DBNameSource+''''', @TypeBack=''''Full'''', @OnlyFull=1, @ForceCopy=1;
 						  '') AT ['+@ServerSource+']
 					');
 				SET @NewFB=1;	
@@ -155,25 +155,25 @@
 						DECLARE @TTD TABLE (DB NVARCHAR(300));
 						IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 							INSERT INTO @TTD
-							SELECT [DBName] AS DB FROM sputnik.backups.BackConf WHERE Kind='Diff' AND DBName=@DBNameSource;
+							SELECT [DBName] AS DB FROM backups.BackConf WHERE Kind='Diff' AND DBName=@DBNameSource;
 						ELSE
 							INSERT INTO @TTD
 							EXEC('SELECT [DBName] AS DB
-								  FROM OPENQUERY(['+@ServerSource+'], ''SELECT [DBName] FROM sputnik.backups.BackConf WHERE Kind=''''Diff'''' AND DBName=N'''''+@DBNameSource+''''';'')
+								  FROM OPENQUERY(['+@ServerSource+'], ''SELECT [DBName] FROM backups.BackConf WHERE Kind=''''Diff'''' AND DBName=N'''''+@DBNameSource+''''';'')
 								  ');
 						IF NOT EXISTS(SELECT DB FROM @TTD)
 						BEGIN
 							IF @ServerSource IS NULL OR @ServerSource=@LocalServer
-								INSERT INTO sputnik.backups.BackConf ([DBName], LocalDir, NetDir, LocalDays, NetDays, Kind, [LocalPolicy],[NetPolicy])
+								INSERT INTO backups.BackConf ([DBName], LocalDir, NetDir, LocalDays, NetDays, Kind, [LocalPolicy],[NetPolicy])
 								SELECT [DBName], LocalDir, NetDir, 1, 1, 'Diff' AS Kind, 1, 1
-								FROM sputnik.backups.BackConf
+								FROM backups.BackConf
 								WHERE  Kind='Full' AND DBName=@DBNameSource
 							ELSE
 								EXEC ('
 									EXEC(''
-										INSERT INTO sputnik.backups.BackConf ([DBName], LocalDir, NetDir, LocalDays, NetDays, Kind, [LocalPolicy],[NetPolicy])
+										INSERT INTO backups.BackConf ([DBName], LocalDir, NetDir, LocalDays, NetDays, Kind, [LocalPolicy],[NetPolicy])
 										SELECT [DBName], LocalDir, NetDir, 1, 1, ''''Diff'''' AS Kind, 1, 1
-										FROM sputnik.backups.BackConf
+										FROM backups.BackConf
 										WHERE  Kind=''''Full'''' AND DBName=N'''''+@DBNameSource+''''';
 									'') AT ['+@ServerSource+']
 								');
@@ -183,14 +183,14 @@
 						--При этом сразу после создания Бэкапа запустим Ротацию по Дифф.бэкапам, чтобы не занять весь диск!
 						IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 						BEGIN
-							EXEC sputnik.backups.usp_RunBack @DBName_in=@DBNameSource, @TypeBack='Diff', @ForceCopy=1;
-							EXEC sputnik.backups.[usp_CleaningBack] @DBFilter=@DBNameSource, @type='Diff';
+							EXEC backups.usp_RunBack @DBName_in=@DBNameSource, @TypeBack='Diff', @ForceCopy=1;
+							EXEC backups.[usp_CleaningBack] @DBFilter=@DBNameSource, @type='Diff';
 						END
 						ELSE
 							EXEC ('
 								EXEC(''
-									EXEC sputnik.backups.usp_RunBack @DBName_in=N'''''+@DBNameSource+''''', @TypeBack=''''Diff'''', @ForceCopy=1;
-									EXEC sputnik.backups.[usp_CleaningBack] @DBFilter=N'''''+@DBNameSource+''''', @type=''''Diff'''';
+									EXEC backups.usp_RunBack @DBName_in=N'''''+@DBNameSource+''''', @TypeBack=''''Diff'''', @ForceCopy=1;
+									EXEC backups.[usp_CleaningBack] @DBFilter=N'''''+@DBNameSource+''''', @type=''''Diff'''';
 								'') AT ['+@ServerSource+']
 							');
 						SET @NewDB=1;	
@@ -207,11 +207,11 @@
 			DELETE FROM @TT;
 			IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 				INSERT INTO @TT
-					EXEC sputnik.info.usp_GetLastBackups @DBName=@DBNameSource, @ToDate=@ToDate;
+					EXEC info.usp_GetLastBackups @DBName=@DBNameSource, @ToDate=@ToDate;
 			ELSE
 				INSERT INTO @TT
 					EXEC ('	SELECT *
-							FROM OPENQUERY(['+@ServerSource+'], ''EXEC sputnik.info.usp_GetLastBackups @DBName=N'''''+@DBNameSource+''''', @ToDate='+@pToDate+';'')
+							FROM OPENQUERY(['+@ServerSource+'], ''EXEC info.usp_GetLastBackups @DBName=N'''''+@DBNameSource+''''', @ToDate='+@pToDate+';'')
 						');
 			IF @NewFB=1
 			BEGIN
@@ -246,11 +246,11 @@
 			IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 			BEGIN
 				begin try
-					UPDATE [sputnik].[backups].[BackConf]
+					UPDATE [backups].[BackConf]
 					SET [Kind]='Log'
 					OUTPUT inserted.[DBName] into @LogOff
 					WHERE [DBName]=@DBNameSource AND [Kind]='XLog';
-					EXEC sputnik.backups.usp_RunBack @DBName_in=@DBNameSource, @TypeBack='Log', @ForceCopy=1;
+					EXEC backups.usp_RunBack @DBName_in=@DBNameSource, @TypeBack='Log', @ForceCopy=1;
 				end try
 				begin catch
 					SET @StrErr=N'Ошибка при попытке сформировать последний бэкап Лога в ХП [usp_GC2]! Текст ошибки: '+ERROR_MESSAGE();
@@ -262,14 +262,14 @@
 					INSERT INTO @LogOff
 					EXEC ('	SELECT DBName
 							FROM OPENQUERY(['+@ServerSource+'], ''SELECT DBName 
-																  FROM [sputnik].[backups].[BackConf] 
+																  FROM [backups].[BackConf] 
 																  WHERE [DBName]=N'''''+@DBNameSource+''''' AND [Kind]=''''XLog'''';'')
 						');
 					IF EXISTS(SELECT DBname FROM @LogOff)
 					BEGIN
 						SET XACT_ABORT ON;
 						EXEC ('	UPDATE OPENQUERY(['+@ServerSource+'], ''SELECT [Kind]
-																		FROM [sputnik].[backups].[BackConf] 
+																		FROM [backups].[BackConf] 
 																		WHERE [DBName]=N'''''+@DBNameSource+''''' AND [Kind]=''''XLog'''';'')
 								SET [Kind]=''Log''
 			 			');
@@ -277,7 +277,7 @@
 					END	
 					EXEC ('
 						EXEC(''
-							EXEC sputnik.backups.usp_RunBack @DBName_in=N'''''+@DBNameSource+''''', @TypeBack=''''Log'''', @ForceCopy=1;
+							EXEC backups.usp_RunBack @DBName_in=N'''''+@DBNameSource+''''', @TypeBack=''''Log'''', @ForceCopy=1;
 						'') AT ['+@ServerSource+']
 					');
 				end try
@@ -296,7 +296,7 @@
 			VALUES (@DiffPath, 'Diff', @BackupDiffID, @BackupDiffFinishDate);
 		IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 			INSERT INTO @ChainBack (BackupFile, BackupType, ID, BackupDate)
-				EXEC sputnik.info.usp_GetChainLogs @DBName=@DBNameSource, @BackupFullID=@BackupFullID, @FilterBackupID=@BackupDiffID, @ToDate=@ToDate, @fromcopy=@fromcopy;
+				EXEC info.usp_GetChainLogs @DBName=@DBNameSource, @BackupFullID=@BackupFullID, @FilterBackupID=@BackupDiffID, @ToDate=@ToDate, @fromcopy=@fromcopy;
 		ELSE
 		BEGIN
 			DECLARE @strP VARCHAR(300);
@@ -306,7 +306,7 @@
 				SET @strP='@BackupFullID='+CAST(@BackupFullID AS VARCHAR(40))+', @FilterBackupID=NULL, @fromcopy='+CAST(@fromcopy AS VARCHAR(1));
 			INSERT INTO @ChainBack (BackupFile, BackupType, ID, BackupDate)
 				EXEC ('	SELECT *
-						FROM OPENQUERY(['+@ServerSource+'] ,''EXEC sputnik.info.usp_GetChainLogs @DBName=N'''''+@DBNameSource+''''',  @ToDate='+@pToDate+', '+@strP+';'')
+						FROM OPENQUERY(['+@ServerSource+'] ,''EXEC info.usp_GetChainLogs @DBName=N'''''+@DBNameSource+''''',  @ToDate='+@pToDate+', '+@strP+';'')
 					 ');
 		END
 		--После формирования цепочки бэкапов, для режима восстановления/настройки Зеркалирования отключим настройки бэкапов Логов
@@ -314,14 +314,14 @@
 		BEGIN
 			IF EXISTS(SELECT DBName FROM @LogOff)
 				IF @ServerSource IS NULL OR @ServerSource=@LocalServer
-					UPDATE [sputnik].[backups].[BackConf]
+					UPDATE [backups].[BackConf]
 					SET [Kind]='XLog'
 					WHERE [DBName]=@DBNameSource AND [Kind]='Log';	
 				ELSE
 				BEGIN 
 					SET XACT_ABORT ON;
 					EXEC ('	UPDATE OPENQUERY(['+@ServerSource+'], ''SELECT [Kind]
-																	FROM [sputnik].[backups].[BackConf] 
+																	FROM [backups].[BackConf] 
 																	WHERE [DBName]=N'''''+@DBNameSource+''''' AND [Kind]=''''Log'''';'')
 							SET [Kind]=''XLog''
 			 			');
@@ -355,7 +355,7 @@
 					if @pp=0
 						PRINT ('********************************
 							Восстановление ['+@DBNameTarget+'] из ПОЛНОГО Бэкапа: '+@BF);
-					EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+					EXEC [backups].[usp_RestoreDB_simple] 
 						@DBNameTarget=@DBNameTarget, 
 						@FromDisk=@BF,
 						@MoveFilesTo=@MoveFilesTo,
@@ -371,7 +371,7 @@
 					if @pp=0
 						PRINT ('********************************
 							Восстановление ['+@DBNameTarget+'] из ДИФФ. Бэкапа: '+@BF);
-					EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+					EXEC [backups].[usp_RestoreDB_simple] 
 						@DBNameTarget=@DBNameTarget, 
 						@FromDisk=@BF,
 						@MoveFilesTo=@MoveFilesTo,
@@ -389,7 +389,7 @@
 					if @pp=0
 						PRINT ('********************************
 							Восстановление ['+@DBNameTarget+'] из Бэкапа ЛОГА (ЖТ): '+@BF);
-					EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+					EXEC [backups].[usp_RestoreDB_simple] 
 						@DBNameTarget=@DBNameTarget, 
 						@FromLog=@BF,
 						@MoveFilesTo=@MoveFilesTo,
@@ -416,16 +416,16 @@
 			if @pp=0
 				PRINT ('********************************
 					Перевод новой базы в режим ONLINE + изменение db_owner');
-			EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+			EXEC [backups].[usp_RestoreDB_simple] 
 				@DBNameTarget=@DBNameTarget, 
 				@ForceRecovery=1,
 				@dbowner=@dbowner;
 		end;
 		--Если запуск произведен из модуля Log Shipping Easy,
-		--тогда установим ID для последнего восстановленного бэкапа в sputnik.lse.TargetConfig
+		--тогда установим ID для последнего восстановленного бэкапа в lse.TargetConfig
 		IF @lse=1
 		BEGIN
-			UPDATE sputnik.lse.TargetConfig
+			UPDATE lse.TargetConfig
 			SET [InitBackupHS_id]=(SELECT MAX(ID) FROM @ChainBack),
 				[InitDate]=@lseInitDate
 			WHERE [DBNameTarget]=@DBNameTarget;
@@ -438,25 +438,25 @@
 			IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 				INSERT INTO @TTD
 				SELECT DBName AS DB 
-				FROM sputnik.backups.BackConf 
+				FROM backups.BackConf 
 				WHERE DBName=@DBNameSource AND Kind='Diff' AND LocalDays=1 AND NetDays=1
 					AND [LocalPolicy]=1 AND [NetPolicy]=1
-					AND EXISTS (SELECT DBName AS DB FROM sputnik.backups.BackConf as BakF WHERE BakF.Kind='Full' AND BakF.DBName=@DBNameSource);
+					AND EXISTS (SELECT DBName AS DB FROM backups.BackConf as BakF WHERE BakF.Kind='Full' AND BakF.DBName=@DBNameSource);
 			ELSE
 				INSERT INTO @TTD
 				EXEC('SELECT [DBName] AS DB
-					  FROM OPENQUERY(['+@ServerSource+'], ''SELECT [DBName] FROM sputnik.backups.BackConf WHERE Kind=''''Diff''''  AND LocalDays=1 AND NetDays=1 AND DBName=N'''''+@DBNameSource+''''' AND [LocalPolicy]=1 AND [NetPolicy]=1 AND EXISTS (SELECT DBName AS DB FROM sputnik.backups.BackConf as BakF WHERE BakF.Kind=''''Full'''' AND BakF.DBName=N'''''+@DBNameSource+''''');'')
+					  FROM OPENQUERY(['+@ServerSource+'], ''SELECT [DBName] FROM backups.BackConf WHERE Kind=''''Diff''''  AND LocalDays=1 AND NetDays=1 AND DBName=N'''''+@DBNameSource+''''' AND [LocalPolicy]=1 AND [NetPolicy]=1 AND EXISTS (SELECT DBName AS DB FROM backups.BackConf as BakF WHERE BakF.Kind=''''Full'''' AND BakF.DBName=N'''''+@DBNameSource+''''');'')
 					');
 			IF @NewConf=1 OR EXISTS(SELECT DB FROM @TTD )
 			BEGIN
 				IF @ServerSource IS NULL OR @ServerSource=@LocalServer
 				BEGIN	
-					EXEC sputnik.backups.[usp_CleaningBack] @DBFilter=@DBNameSource, @type='Diff';
+					EXEC backups.[usp_CleaningBack] @DBFilter=@DBNameSource, @type='Diff';
 					DELETE 
-					FROM sputnik.backups.BackConf
+					FROM backups.BackConf
 					WHERE DBName=@DBNameSource AND Kind='Diff';
 					--Дополнительно удаляем из истории Бэкапов информацию о созданном Дифф. бэкапе
-					DELETE [sputnik].[backups].[BackupHistory]
+					DELETE [backups].[BackupHistory]
 					WHERE [ID] = @BackupDiffID;
 				END
 				ELSE
@@ -465,12 +465,12 @@
 					set @BackupDiffIDstr=CAST(@BackupDiffID AS NVARCHAR(50));
 					EXEC ('
 							EXEC(''
-									EXEC sputnik.backups.[usp_CleaningBack] @DBFilter=N'''''+@DBNameSource+''''', @type=''''Diff'''';
+									EXEC backups.[usp_CleaningBack] @DBFilter=N'''''+@DBNameSource+''''', @type=''''Diff'''';
 									DELETE 
-									FROM sputnik.backups.BackConf
+									FROM backups.BackConf
 									WHERE DBName=N'''''+@DBNameSource+''''' AND Kind=''''Diff'''';
 									--Дополнительно удаляем из истории Бэкапов информацию о созданном Дифф. бэкапе
-									DELETE [sputnik].[backups].[BackupHistory]
+									DELETE [backups].[BackupHistory]
 									WHERE [ID] = '+@BackupDiffIDstr+';
 							'') AT ['+@ServerSource+']
 						');

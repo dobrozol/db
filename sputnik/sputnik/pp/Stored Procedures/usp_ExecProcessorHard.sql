@@ -37,7 +37,7 @@ AS
 				SET	@DB = CAST(@Msg as XML).value('(/DB)[1]', 'NVARCHAR(300)');
 				--Теперь запускаем процедуру [lse].[usp_RollForwardRecovery]
 				--Для этой процедуры должен быть новый параметр @pp=1 (который определяет запуск в многопоточном режиме)
-				EXEC [sputnik].[lse].[usp_RollForwardRecovery] @DBName=@DB, @pp=1;
+				EXEC [lse].[usp_RollForwardRecovery] @DBName=@DB, @pp=1;
 			end try
 			begin catch
 				SET @StrErr=N'Ошибка при запуске [lse].[usp_RollForwardRecovery] в потоке [pp].usp_ExecProcessor. Текст ошибки: '+ERROR_MESSAGE();
@@ -54,7 +54,7 @@ AS
 				SET	@TypeBack = CAST(@Msg as XML).value('(/backups/type)[1]', 'VARCHAR(4)');
 				--Теперь запускаем процедуру выполнения бэкапов [usp_StartBackup] для конкретной БД
 				--с параметром @pp=1 - указывает что работа идёт в многопоточном режиме! 
-				EXEC [sputnik].[backups].[usp_StartBackup] @DBFilter=@DB, @type=@TypeBack, @pp=1;
+				EXEC [backups].[usp_StartBackup] @DBFilter=@DB, @type=@TypeBack, @pp=1;
 			end try
 			begin catch
 				SET @StrErr=N'Ошибка при запуске [backups].[usp_StartBackup] в потоке [pp].usp_ExecProcessor. Имя БД: ['+@DB+']; Тип бэкапа: ['+@TypeBack+']. Текст ошибки: '+ERROR_MESSAGE();

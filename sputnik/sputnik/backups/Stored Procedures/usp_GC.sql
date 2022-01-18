@@ -5,7 +5,7 @@
 -- Description: usp_GC - GetCopy. Эта процедура позволяет поднять копию базы на локальном сервере на указанный момент времени.
 				В основе - восстановление по процедуре usp_RestoreDB_simple (восстановление из Полного бэкапа и из бэкапов Логов).
 				Используется информация из базы sputnik, чтобы определить необходимую цепочку бэкапов для восстановления.
-				То есть, для успешного выполнения вся необходимая информация должна быть в базе sputnik.
+				То есть, для успешного выполнения вся необходимая информация должна быть в базе 
 				Параметры:
 					@DBNameSource - обязательный параметр, это имя базы источника (откуда делаем копию данных);
 					@DBNameTarget - необязательный параметр, это имя базы назначения (куда загружам данные). Если не задан, то имя будет
@@ -33,17 +33,17 @@ BEGIN
 	--Получаем каталог и файл полного бэкапа (по информации из базы sputnik на боевом сервере).
 	SELECT
 		  @File=[Backup_File]+'.BAK', @BackupID=ID, @BackupFinishDate=backup_finish_date, @BackupStartDate=backup_start_date   
-	FROM [sputnik].[backups].[BackupHistory]
+	FROM [backups].[BackupHistory]
 	WHERE
 		ID = (
 				SELECT ID
-				FROM [sputnik].[backups].[BackupHistory]
+				FROM [backups].[BackupHistory]
 				WHERE
 					[DB_Name]=@DBNameSource
 					AND [Backup_Type]='Full' 
 					AND [backup_finish_date] = (SELECT 
 													MAX(backup_finish_date)
-												FROM [sputnik].[backups].[BackupHistory]
+												FROM [backups].[BackupHistory]
 												WHERE
 													[DB_Name]=@DBNameSource
 													AND [Backup_Type]='Full'
@@ -60,17 +60,17 @@ BEGIN
 	--Получение цепочки бэкапов Логов для восстановления (опять же из базы sputnik боевого сервера)
 	SELECT BACKUP_File, Backup_Finish_Date
 	INTO #T_Logs
-	FROM [sputnik].[backups].[BackupHistory]
+	FROM [backups].[BackupHistory]
 	WHERE
 		DB_NAME=@DBNameSource 
 		AND database_backup_lsn=(
 			SELECT MIN(database_backup_lsn)
-			FROM [sputnik].[backups].[BackupHistory]
+			FROM [backups].[BackupHistory]
 			WHERE DB_NAME=@DBNameSource
 			AND database_backup_lsn>
 				(
 					SELECT [database_backup_LSN]
-					FROM [sputnik].[backups].[BackupHistory]
+					FROM [backups].[BackupHistory]
 					WHERE ID=@BackupID
 				)
 			)
@@ -85,7 +85,7 @@ BEGIN
 		IF @DBNameTarget IS NULL
 			SET @DBNameTarget=@DBNameSource+'_COPY_'+CONVERT(VARCHAR(8), @BackupFinishDate, 112)+'_'+REPLACE(CONVERT(VARCHAR(20), @BackupFinishDate, 108), ':', '');
 
-		EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+		EXEC [backups].[usp_RestoreDB_simple] 
 			@DBNameTarget=@DBNameTarget, 
 			@FromDisk=@FullPath;
 	END
@@ -101,7 +101,7 @@ BEGIN
 		END
 		PRINT ('********************************
 				Восстановление ПОЛНОГО Бэкапа: '+@FullPath);
-		EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+		EXEC [backups].[usp_RestoreDB_simple] 
 			@DBNameTarget=@DBNameTarget, 
 			@FromDisk=@FullPath,
 			@NoRecovery=1;
@@ -124,7 +124,7 @@ BEGIN
 			PRINT ('********************************
 					Восстановление Бэкапа Лога: '+@FullPath);
 
-			EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+			EXEC [backups].[usp_RestoreDB_simple] 
 				@DBNameTarget=@DBNameTarget, 
 				@FromLog=@FullPath,
 				@NoRecovery=1
@@ -136,7 +136,7 @@ BEGIN
 		--Перевод базы данных в режим RECOVERY
 		PRINT ('********************************
 				Перевод новой базы в режим ONLINE');
-		EXEC [sputnik].[backups].[usp_RestoreDB_simple] 
+		EXEC [backups].[usp_RestoreDB_simple] 
 			@DBNameTarget=@DBNameTarget, 
 			@ForceRecovery=1
 	END;

@@ -27,7 +27,7 @@ begin
 	----Настраиваем и включаем сборщик данных через Extended Events!
 	----xEvents сессия для сбора информации о счетчиках группы Logical Disk (инфо обновляется каждые 15 сек.)
 	----Данные сохраняются в кольцевой буфер и хранятся тут совсем недолго.
-	----Эти данные нужно успеть захватить и обработать и положить в схему awr в базу sputnik.
+	----Эти данные нужно успеть захватить и обработать и положить в схему awr в базу 
 	--	CREATE EVENT SESSION [xe_DiskInfo] ON SERVER 
 	--		ADD EVENT sqlserver.perfobject_logicaldisk 
 	--		ADD TARGET package0.ring_buffer(SET max_events_limit=(128),max_memory=(32768))

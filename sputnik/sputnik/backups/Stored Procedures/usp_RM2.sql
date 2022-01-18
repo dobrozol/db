@@ -3,7 +3,7 @@
 	-- Author:		Иванов Андрей (sql1c)
 	-- Create date: 05.08.2014 (2.0)
 	-- Description:	usp_RM - REPAIR MIRROR - настройка/ремонт Зеркалирования для указанной БД.
-					В основе алгоритма - backup/restore базы с помощью функционала sputnik.
+					В основе алгоритма - backup/restore базы с помощью функционала 
 	   Update:
 					05.08.2014 (2.0)
 					Совершенно новая версия ХП usp_RM! Теперь используется новая ХП usp_GC2 для поднятия копии БД на Зеркальном сервере!
@@ -92,17 +92,17 @@
 			return 0;
 
 		--Проверяем настройки для бэкапа LOg - если их Нет, то добавить!
-		IF NOT EXISTS(SELECT [DBName] FROM sputnik.backups.BackConf WHERE Kind IN ('Log','XLog') AND DBName=@DB)
+		IF NOT EXISTS(SELECT [DBName] FROM backups.BackConf WHERE Kind IN ('Log','XLog') AND DBName=@DB)
 		BEGIN
-			INSERT INTO sputnik.backups.BackConf ([DBName], LocalDir, NetDir, LocalDays, NetDays, Kind)
+			INSERT INTO backups.BackConf ([DBName], LocalDir, NetDir, LocalDays, NetDays, Kind)
 			SELECT TOP 1
 				[DBName], LocalDir+'LOG\', NetDir+'LOG\', 2, 2, 'Log' AS Kind
-			FROM sputnik.backups.BackConf
+			FROM backups.BackConf
 			WHERE DBName=@DB
 		END;
 
 		--Отключаем Бэкапы Лога для базы на Боевом сервере на время поднятия Копии БД на Зеркальном сервере и настройки Зеркала!
-		UPDATE [sputnik].[backups].[BackConf]
+		UPDATE [backups].[BackConf]
 			SET [Kind]='XLog'
 			WHERE [DBName]=@DB AND [Kind]='Log';
 	
@@ -125,7 +125,7 @@
 		begin try
 			EXEC('
 				EXEC
-				(''exec sputnik.backups.usp_GC2 @ServerSource=N'''''+@LocalServer+''''', @DBNameSource=N'''''+@DB+''''', @DBNameTarget=N'''''+@DB+''''',
+				(''exec backups.usp_GC2 @ServerSource=N'''''+@LocalServer+''''', @DBNameSource=N'''''+@DB+''''', @DBNameTarget=N'''''+@DB+''''',
 												@FromCopy=1, @NoRecovery=1, @RunNewBackIfNeed=1, @FreshBack='+@UseFreshDiffBack_char+', @RM=1'+@MoveFilesTo_str+@MoveLogFilesTo_str+',@RunNewDiffBackIfNeed='+@UseFreshDiffBack_char+';
 				'')
 				AT ['+@ServerMirror+']
@@ -181,7 +181,7 @@
 		end catch 
 
 		--Включаем Бэкапы Лога для боевой базы на 2-м сервере!
-		UPDATE [sputnik].[backups].[BackConf]
+		UPDATE [backups].[BackConf]
 			SET [Kind]='Log'
 			WHERE [DBName]=@DB AND [Kind]='XLog';
 

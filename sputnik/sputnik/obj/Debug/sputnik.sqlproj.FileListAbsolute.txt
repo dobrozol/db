@@ -7,7 +7,3 @@ C:\usr\repos\db\sputnik\sputnik\bin\Debug\sputnik.pdb
 C:\usr\repos\db\sputnik\sputnik\bin\Debug\master.dacpac
 C:\usr\repos\db\sputnik\sputnik\obj\Debug\sputnik.sqlproj.CopyComplete
 C:\usr\repos\db\sputnik\sputnik\bin\Debug\msdb.dacpac
-C:\usr\repos\db\sputnik\sputnik\obj\Debug\Model.xml
-C:\usr\repos\db\sputnik\sputnik\obj\Debug\refactor.xml
-C:\usr\repos\db\sputnik\sputnik\obj\Debug\postdeploy.sql
-C:\usr\repos\db\sputnik\sputnik\obj\Debug\predeploy.sql

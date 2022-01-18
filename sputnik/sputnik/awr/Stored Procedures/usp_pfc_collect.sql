@@ -48,7 +48,7 @@
 		--Настраиваем и включаем сборщик данных через Extended Events!
 		--xEvents сессия для сбора информации о счетчиках группы Logical Disk (инфо обновляется каждые 15 сек.)
 		--Данные сохраняются в кольцевой буфер и хранятся тут совсем недолго.
-		--Эти данные нужно успеть захватить и обработать и положить в схему awr в базу sputnik.
+		--Эти данные нужно успеть захватить и обработать и положить в схему awr в базу 
 			CREATE EVENT SESSION [xe_DiskInfo] ON SERVER 
 				ADD EVENT sqlserver.perfobject_logicaldisk 
 				ADD TARGET package0.ring_buffer(SET max_events_limit=(128),max_memory=(32768))
@@ -94,8 +94,8 @@
 		declare @T2 table(tt datetime null,id int null,cnt numeric(19,2));
 		declare @T_tmp table(tt datetime null, counter_name nvarchar(300) null, instance_name nvarchar(300), value numeric(19,2));
 		declare @id_spwhoisactive_count smallint=null, @id_sleeptran_count smallint=null;
-		select @id_spwhoisactive_count=id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name='Active sessions (sp_whoisactive)' and instance_name='_Total';
-		select @id_sleeptran_count=id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name='Active sessions (sp_whoisactive)' and instance_name='Sleep_transactions';
+		select @id_spwhoisactive_count=id from awr.pfc_handle where [object_name]='awr' and counter_name='Active sessions (sp_whoisactive)' and instance_name='_Total';
+		select @id_sleeptran_count=id from awr.pfc_handle where [object_name]='awr' and counter_name='Active sessions (sp_whoisactive)' and instance_name='Sleep_transactions';
 		if @id_spwhoisactive_count is not null
 		begin tran
 			insert into @T2(cnt)
@@ -114,7 +114,7 @@
 		commit
 
 		--2. Всего установлено памяти на сервере в Мб и всего использовано памяти в Мб из системного dmv:
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name IN ('Physical Memory (Gb)','Physical Memory (Mb)'))
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name IN ('Physical Memory (Gb)','Physical Memory (Mb)'))
 		begin
 			;with cte_1 AS(
 				SELECT 
@@ -136,7 +136,7 @@
 			cte_3 AS (
 				select id,h.instance_name
 				from awr.pfc_handle h
-				where [object_name]='sputnik.awr' and counter_name IN ('Physical Memory (Gb)','Physical Memory (Mb)')
+				where [object_name]='awr' and counter_name IN ('Physical Memory (Gb)','Physical Memory (Mb)')
 			)
 			insert into @T2(tt,id,cnt)
 			select 
@@ -150,7 +150,7 @@
 		end
 
 		--3. Загрузка информации о текущем времени выполнения запросов (sp_whoisactive) 
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name='Run_time_query_min')
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name='Run_time_query_min')
 		begin
 			delete @T_tmp;
 			insert into @T_tmp (tt,counter_name,instance_name, value)
@@ -165,7 +165,7 @@
 				from awr.pfc_handle h
 				left join awr.pfc_data d 
 					on h.id=d.pfc_id  and d.tt>dateadd(minute,-10,@tt) --оптимизация - фильтруем, используем индекс чтобы быстро искать!
-				where [object_name]='sputnik.awr' and counter_name='Run_time_query_min'
+				where [object_name]='awr' and counter_name='Run_time_query_min'
 			)
 			insert into @T2(tt,id,cnt)
 			select 
@@ -180,7 +180,7 @@
 		end
 		
 		--4. Загрузка CPU общая и текущим экземпляров SQL Server из системного Extended Events
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name='CPU usage %')
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name='CPU usage %')
 		begin
 			DECLARE @ts_now bigint = (SELECT cpu_ticks/(cpu_ticks/ms_ticks)FROM sys.dm_os_sys_info); 
 			;WITH cte_1 AS(
@@ -211,7 +211,7 @@
 				from awr.pfc_handle h
 				left join awr.pfc_data d 
 					on h.id=d.pfc_id  and d.tt>dateadd(minute,-10,@tt) --оптимизация - фильтруем, используем индекс чтобы быстро искать!
-				where [object_name]='sputnik.awr' and counter_name='CPU usage %'
+				where [object_name]='awr' and counter_name='CPU usage %'
 				group by h.id, h.instance_name
 			)
 			insert into @T2(tt,id,cnt)
@@ -228,7 +228,7 @@
 
 		--5. Подготовка и загрузка динамических данных (например, данных по каждому дисковому разделу)
 		declare @T_dyn table(tt datetime null, id smallint null, cnt numeric(19,2));
-		if exists(select top 1 id from awr.pfc_handle where [object_name]='sputnik.awr' and instance_name='#dynamic#')
+		if exists(select top 1 id from awr.pfc_handle where [object_name]='awr' and instance_name='#dynamic#')
 		begin
 			delete @T_tmp;
 			insert into @T_tmp (tt,counter_name,instance_name, value)
@@ -238,7 +238,7 @@
 				select h.id, T.instance_name
 				from @T_tmp T
 				inner join awr.pfc_handle h
-					on T.counter_name=h.counter_name and h.[object_name]='sputnik.awr' and h.instance_name='#dynamic#'
+					on T.counter_name=h.counter_name and h.[object_name]='awr' and h.instance_name='#dynamic#'
 			)
 			MERGE
 			INTO awr.pfc_handle_dyn as Target
@@ -254,7 +254,7 @@
 				select T.tt, dyn_h.id, T.value
 				from @T_tmp T
 				inner join awr.pfc_handle h
-					on T.counter_name=h.counter_name and h.[object_name]='sputnik.awr' and h.instance_name='#dynamic#'
+					on T.counter_name=h.counter_name and h.[object_name]='awr' and h.instance_name='#dynamic#'
 				inner join awr.pfc_handle_dyn dyn_h
 					on h.id=dyn_h.pfc_id and T.instance_name=dyn_h.instance_name
 			),
@@ -276,7 +276,7 @@
 		end
 
 		--6. Загрузка информации о текущем Uptime для SQL Server в часах
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name='SQL Server Uptime (hours)')
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name='SQL Server Uptime (hours)')
 		begin
 
 			;with cte_1 AS(
@@ -288,7 +288,7 @@
 			cte_2 AS (
 				select id
 				from awr.pfc_handle h
-				where [object_name]='sputnik.awr' and counter_name IN ('SQL Server Uptime (hours)')
+				where [object_name]='awr' and counter_name IN ('SQL Server Uptime (hours)')
 			)
 			insert into @T2(tt,id,cnt)
 			select 
@@ -300,7 +300,7 @@
 		end
 
 		--7. Загрузка информации о Времени отклика (в милисек.)
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name='Response time (ms)')
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name='Response time (ms)')
 		begin
 			declare @tt_start datetime2, @tt_end datetime2, @t float, @i smallint=0;
 			set @tt_start=SYSDATETIME();
@@ -334,7 +334,7 @@
 			cte_2 AS (
 				select id
 				from awr.pfc_handle h
-				where [object_name]='sputnik.awr' and counter_name IN ('Response time (ms)')
+				where [object_name]='awr' and counter_name IN ('Response time (ms)')
 			)
 			insert into @T2(tt,id,cnt)
 			select 
@@ -346,7 +346,7 @@
 		end
 
 		--8. Загрузка информации о текущем времени выполнения Транзакций (sys.dm_tran_active_transactions) 
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name='Tran_RunTime_min')
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name='Tran_RunTime_min')
 		begin
 			delete @T_tmp;
 			;with cte_src1 as(
@@ -380,7 +380,7 @@
 			(
 				select distinct h.id,h.instance_name
 				from awr.pfc_handle h
-				where [object_name]='sputnik.awr' and counter_name='Tran_RunTime_min'
+				where [object_name]='awr' and counter_name='Tran_RunTime_min'
 			)
 			insert into @T2(tt,id,cnt)
 			select 
@@ -394,7 +394,7 @@
 		end
 
 		--9. Загрузка информации о sp_whoisactive: сколько строк возвращает, и за сколько мсек. отрабатывает 
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name='sp_whoisactive')
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name='sp_whoisactive')
 		begin
 			delete @T_tmp;
 			declare @cnt bigint;
@@ -430,7 +430,7 @@
 			(
 				select distinct h.id,h.instance_name
 				from awr.pfc_handle h
-				where [object_name]='sputnik.awr' and counter_name='sp_whoisactive'
+				where [object_name]='awr' and counter_name='sp_whoisactive'
 			)
 			insert into @T2(tt,id,cnt)
 			select 
@@ -444,12 +444,12 @@
 		end
 
 		--10. Загрузка информации о регламентых заданиях (Jobs) sputnik 
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name LIKE 'Job$_%' ESCAPE '$')
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name LIKE 'Job$_%' ESCAPE '$')
 		begin
 			delete @T_tmp;
 			declare @TJ TABLE (Job nvarchar(2000), Step nvarchar(2000),RUN_STATUS varchar(50), Duration_min numeric(19,2));
 			insert into @TJ (Job,Step,RUN_STATUS,Duration_min)
-			exec sputnik.info.usp_JobMonitor @Lite=1, @OnlyEnabled=0;
+			exec info.usp_JobMonitor @Lite=1, @OnlyEnabled=0;
 
 			insert into @T_tmp (tt,counter_name,instance_name, [value])
 			select distinct @tt as tt, 'Job_Backup_min' as counter_name, 'Full_or_Diff' as instance_name, CASE WHEN RUN_STATUS='Running' THEN [Duration_min] ELSE 0 END as [value]
@@ -500,7 +500,7 @@
 			(
 				select distinct h.id, h.instance_name, h.counter_name
 				from awr.pfc_handle h
-				where [object_name]='sputnik.awr' and counter_name LIKE 'Job$_%' ESCAPE '$'
+				where [object_name]='awr' and counter_name LIKE 'Job$_%' ESCAPE '$'
 			)
 			insert into @T2(tt,id,cnt)
 			select 
@@ -514,7 +514,7 @@
 		end
 
 		--11. Загрузка информации об использовании TempDB в Мб
-		if exists(select id from awr.pfc_handle where [object_name]='sputnik.awr' and counter_name = 'tempdb_using_Mb')
+		if exists(select id from awr.pfc_handle where [object_name]='awr' and counter_name = 'tempdb_using_Mb')
 		begin
 			delete @T_tmp;
 			;with cte_src1 as(
@@ -528,7 +528,7 @@
 						ELSE NULL
 					END as instance_name,	 
 					vl as [value]
-				from sputnik.info.vtempusing
+				from info.vtempusing
 			)
 			insert into @T_tmp (tt,counter_name,instance_name, value)
 			select @tt as tt, 'tempdb_using_Mb' as counter_name, instance_name, [value]
@@ -541,7 +541,7 @@
 			(
 				select distinct h.id,h.instance_name
 				from awr.pfc_handle h
-				where [object_name]='sputnik.awr' and counter_name='tempdb_using_Mb'
+				where [object_name]='awr' and counter_name='tempdb_using_Mb'
 			)
 			insert into @T2(tt,id,cnt)
 			select 

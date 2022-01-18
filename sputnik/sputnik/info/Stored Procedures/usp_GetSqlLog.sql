@@ -1,5 +1,4 @@
-﻿
-/* =============================================
+﻿/* =============================================
 -- Author:		Андрей Иванов (sqland1c)
 -- Create date: 15.03.2015
 -- Description:	Эта процедура возвращает информацию из журналов SQL Server.
@@ -33,8 +32,10 @@
 				31.01.2019 (1.250)
 				Добавлен новый параметр @SortAZ-направление сортировки в результате.
 				Также переделан алгоритм получения результата: вместо нескольких запросов сделан один динамический код sql.
+				05.12.2021 (1.251)
+				group by mode was fixed
 -- ============================================= */
-CREATE PROCEDURE info.usp_GetSqlLog
+CREATE PROCEDURE [info].[usp_GetSqlLog]
 	@Filter1 NVARCHAR(200) = NULL,
 	@Filter2 NVARCHAR(200) = NULL,
 	@FilterOR BIT = 0,
@@ -58,7 +59,7 @@ BEGIN
 	DECLARE @GD DATETIME2(0)=SYSDATETIME(), @Num TINYINT;
 	declare @SQLServer nvarchar(510);
 	declare @cmd nvarchar(max);
-	exec sputnik.info.usp_GetHostname @Servername=@SQLServer OUT;
+	exec info.usp_GetHostname @Servername=@SQLServer OUT;
 
 	IF @DateStart IS NULL AND @DateEnd IS NULL
 	BEGIN
@@ -108,28 +109,28 @@ BEGIN
 	DEALLOCATE N;
 	
 	SET @cmd = '
-	SELECT TOP ('+cast(@TOP as varchar(20))+') 
+	SELECT '+CASE WHEN isnull(@GroupByText,0)=1 THEN 'DISTINCT ' ELSE 'TOP ('+cast(@TOP as varchar(20))+')' END + '
 		'''+@SQLServer+''' AS ServerName, 
 		'+CASE 
 				
-			WHEN (@GroupByText=0 OR @GroupByText IS NULL) AND @Convert_tz_InResults=1 THEN 'ISNULL(DATEADD(minute,'+cast(@tt_tz_min as varchar(20))+'-datepart(TZoffset,SYSDATETIMEOFFSET()),LogDate),LogDate)'
-			WHEN (@GroupByText=0 OR @GroupByText IS NULL) AND @Convert_tz_InResults<>1 THEN 'LogDate'
-			WHEN (@GroupByText<>0 AND @GroupByText IS NOT NULL) AND @Convert_tz_InResults=1 THEN 'max(ISNULL(DATEADD(minute,'+cast(@tt_tz_min as varchar(20))+'-datepart(TZoffset,SYSDATETIMEOFFSET()),LogDate),LogDate)) over (partition by [Text])'
-			WHEN (@GroupByText<>0 AND @GroupByText IS NOT NULL) AND @Convert_tz_InResults<>1 THEN 'Max(LogDate) over (partition by [Text])'
+			WHEN (isnull(@GroupByText,0)=0) AND @Convert_tz_InResults=1 THEN 'ISNULL(DATEADD(minute,'+cast(@tt_tz_min as varchar(20))+'-datepart(TZoffset,SYSDATETIMEOFFSET()),LogDate),LogDate)'
+			WHEN (isnull(@GroupByText,0)=0) AND @Convert_tz_InResults<>1 THEN 'LogDate'
+			WHEN (isnull(@GroupByText,0)=1) AND @Convert_tz_InResults=1 THEN 'max(ISNULL(DATEADD(minute,'+cast(@tt_tz_min as varchar(20))+'-datepart(TZoffset,SYSDATETIMEOFFSET()),LogDate),LogDate)) over (partition by [Text])'
+			WHEN (isnull(@GroupByText,0)=1) AND @Convert_tz_InResults<>1 THEN 'Max(LogDate) over (partition by [Text])'
 		END +' AS LogDate,
 		'+CASE 
 				
-			WHEN (@GroupByText=0 OR @GroupByText IS NULL) AND @Convert_tz_InResults=1 THEN 'CONVERT(VARCHAR(23),ISNULL(DATEADD(minute,'+cast(@tt_tz_min as varchar(20))+'-datepart(TZoffset,SYSDATETIMEOFFSET()),LogDate),LogDate),121)'
-			WHEN (@GroupByText=0 OR @GroupByText IS NULL) AND @Convert_tz_InResults<>1 THEN 'CONVERT(VARCHAR(23),LogDate,121)'
-			WHEN (@GroupByText<>0 AND @GroupByText IS NOT NULL) AND @Convert_tz_InResults=1 THEN 'CONVERT(VARCHAR(23),max(ISNULL(DATEADD(minute,'+cast(@tt_tz_min as varchar(20))+'-datepart(TZoffset,SYSDATETIMEOFFSET()),LogDate),LogDate)) over (partition by [Text]),121)'
-			WHEN (@GroupByText<>0 AND @GroupByText IS NOT NULL) AND @Convert_tz_InResults<>1 THEN 'CONVERT(VARCHAR(23),Max(LogDate) over (partition by [Text]),121)'
+			WHEN (isnull(@GroupByText,0)=0) AND @Convert_tz_InResults=1 THEN 'CONVERT(VARCHAR(23),ISNULL(DATEADD(minute,'+cast(@tt_tz_min as varchar(20))+'-datepart(TZoffset,SYSDATETIMEOFFSET()),LogDate),LogDate),121)'
+			WHEN (isnull(@GroupByText,0)=0) AND @Convert_tz_InResults<>1 THEN 'CONVERT(VARCHAR(23),LogDate,121)'
+			WHEN (isnull(@GroupByText,0)=1) AND @Convert_tz_InResults=1 THEN 'CONVERT(VARCHAR(23),max(ISNULL(DATEADD(minute,'+cast(@tt_tz_min as varchar(20))+'-datepart(TZoffset,SYSDATETIMEOFFSET()),LogDate),LogDate)) over (partition by [Text]),121)'
+			WHEN (isnull(@GroupByText,0)=1) AND @Convert_tz_InResults<>1 THEN 'CONVERT(VARCHAR(23),Max(LogDate) over (partition by [Text]),121)'
 		END +' AS LogDate_str,
 		'+CASE 
-			WHEN (@GroupByText=0 OR @GroupByText IS NULL) THEN 'ProccessInfo,'
+			WHEN (isnull(@GroupByText,0)=0) THEN 'ProccessInfo,'
 			ELSE 'COUNT(*) over (partition by [Text]) as ProccessInfo,'
 		END+' 
 		'+case
-			when @WithRowNum=1 and (@GroupByText=0 OR @GroupByText IS NULL) then 'ROW_NUMBER() OVER (PARTITION BY CONVERT(VARCHAR(19),LogDate,121),ProccessInfo ORDER BY LogDate DESC) AS RowNum' 
+			when @WithRowNum=1 and (isnull(@GroupByText,0)=0) then 'ROW_NUMBER() OVER (PARTITION BY CONVERT(VARCHAR(19),LogDate,121),ProccessInfo ORDER BY LogDate DESC) AS RowNum' 
 			else 'NULL AS RowNum' 
 		end+', 
 		[Text]
@@ -138,7 +139,9 @@ BEGIN
 		'+CASE WHEN @FilterNotLike IS NULL THEN '' ELSE 'AND [Text] NOT LIKE '''+@FilterNotLike+'''' END+'
 		'+CASE WHEN @FilterSource IS NULL THEN '' ELSE 'AND [ProccessInfo] LIKE '''+@FilterSource+'''' END+'
 		'+CASE WHEN @FilterSourceNotLike IS NULL THEN '' ELSE 'AND [ProccessInfo] NOT LIKE '''+@FilterSourceNotLike+'''' END+' 
-	ORDER BY LogDate '+@SortAZ+';';	
+	
+	ORDER BY '+CASE WHEN isnull(@GroupByText,0)=1 THEN '[ProccessInfo]' ELSE 'LogDate ' END +@SortAZ+';';	
 	--PRINT (@cmd);
 	EXEC (@cmd);
 END
+GO

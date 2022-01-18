@@ -10,7 +10,7 @@
 	AS
 	BEGIN
 		set nocount on;
-		select [vl] from sputnik.info.vtempusing where pr='total_mb';
+		select [vl] from info.vtempusing where pr='total_mb';
 	END
 GO
 GRANT EXECUTE

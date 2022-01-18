@@ -119,7 +119,7 @@
 			from
 			(
 				select distinct DBName
-				from sputnik.info.vGetAllBackConf
+				from info.vGetAllBackConf
 				where
 					(@DBFilter is null or DBName=@DBFilter)
 					and (@type is null or (Kind=@type) or (Kind in ('Full','Diff') and @type='Full'))

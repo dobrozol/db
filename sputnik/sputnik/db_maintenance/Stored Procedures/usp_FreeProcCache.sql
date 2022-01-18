@@ -15,20 +15,20 @@ BEGIN
 	declare @WeekDay tinyint, @getdate datetime2(2), @PeriodHours tinyint, @LastRunDate datetime2(2);
 	set nocount on;
 	set @getdate=GETDATE();
-	select @WeekDay=sputnik.info.uf_GetWeekDay(@getdate);
+	select @WeekDay=info.uf_GetWeekDay(@getdate);
 
 	select top 1 
 		@PeriodHours=[PeriodHours], 
 		@LastRunDate=[LastRunDate]
 	from 
-		[sputnik].[db_maintenance].[FreeProcCache]
+		[db_maintenance].[FreeProcCache]
 	where 
 		(WeekDay is null or WeekDay=@WeekDay)
 	
 	if (@LastRunDate is null) or (datediff(hour,@LastRunDate,@getdate)>=@PeriodHours) or (@Force=1)
 	begin
 		DBCC FREEPROCCACHE;
-		update [sputnik].[db_maintenance].[FreeProcCache]
+		update [db_maintenance].[FreeProcCache]
 		set [LastRunDate]=@getdate;
 	end
 END

@@ -72,6 +72,17 @@
 					Увеличины размеры строковых переменных.
 					14.11.2018 (3.010)
 					Добавлена совместимость с 2008 (iif заменены на case).
+					16.11.2021 (3.020) 
+					added NoReorganize parameter (if page-level locks are disabled in the index).
+					reorganize will be replaced with a rebuild index
+					16.11.2021 (3.030) 
+					added managed locks for multithreading.
+					17.11.2021 (3.040) 
+					refactoring, fixing and adding new value for parameter @policy_offline
+					20.11.2021 (3.042) 
+					the LastRunStartTime field will be used to split objects in multi-threaded mode
+					01.12.2021 (3.043)
+					rebuild offline fixed, add exclude mode by schema name from stop list
 	-- ============================================= */
 	CREATE PROCEDURE [db_maintenance].[usp_reindex_run]
 		@db_name nvarchar(2000)=NULL,
@@ -96,7 +107,9 @@
 		@PageUsed_tresh tinyint = 80,	--% заполнения страницы, если меньше этого значения то обязательно нужен REBUILD, а не reorganize.
 		@MaxDop smallint = NULL,		--кол-во ядер CPU на которых будет выполнятся обслуживание индекса (Работает только в Enterprise!).
 		@timeout_sec int = NULL,		--Ограничение времени выполнения в данной процедуре в сек. Если NULL (или 0) - бесконечно.
-		@policy_offline tinyint = 2		--Определяет что делать, если Online Rebuild невозможен: 0-Rebuild Offline,1-пропустить,2-Reorganize.
+		@policy_offline tinyint = 3,		--Determines what to do if online rebuild is not possible: 0-skip, 1-offline rebuild, 2-reorganize, 3-reorganize or offline rebuild.
+		@walp_max_duration smallint = NULL,	--option WAIT_AT_LOW_PRIORITY parameter MAX_DURATION (in minutes). NULL - this option will not use
+		@walp_abort_after_wait varchar(20) = 'NONE' --option WAIT_AT_LOW_PRIORITY parameter ABORT_AFTER_WAIT (NONE, SELF, BLOCKERS)
 	AS
 	BEGIN
 		SET NOCOUNT ON;
@@ -104,27 +117,13 @@
 		SET LOCK_TIMEOUT 30000;
 		SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 
-		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX),@flag_fail bit, @db_id_check int, @obj_id int, @ind_id int, @command_type tinyint, @tsql_handle_log varchar(2000), @commant_text_log Nvarchar(MAX),@AllCores_cnt smallint, @MaxDop_set smallint;
+		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX),@flag_fail bit, @db_id_check int, @obj_id int, @ind_id int, @command_type tinyint, @tsql_handle_log varchar(2000), @commant_text_log Nvarchar(MAX),@AllCores_cnt smallint, @MaxDop_set smallint=@MaxDop;
 		declare @tt_start_usp datetime2(2), @time_elapsed_sec int;
-		declare @tsql_handle nvarchar (2400), @tsql nvarchar (2400), @tsqlcheck nvarchar (800), @StopList_str NVARCHAR(MAX);
+		declare @tsql_handle nvarchar (4000), @tsql nvarchar (max), @tsqlcheck nvarchar (2000), @StopList_str NVARCHAR(MAX), @walp_option varchar(300)='', @commandWithAppLock varchar(max);
 		declare @MirrorState nvarchar(75);
 		set @tt_start_usp=CAST(SYSDATETIME() AS datetime2(2));
-		--Определяем текущую редакцию SQL Server. MaxDop будет работать только в Enterprise:
+		--Определяем текущую редакцию SQL Server. MaxDop/online rebuild будет работать только в Enterprise:
 		DECLARE @Ed VARCHAR(3)=LEFT(CAST(SERVERPROPERTY('Edition') AS VARCHAR(128)),3);
-		IF @Ed='Ent'
-		BEGIN
-			--Определяем доступное кол-во ядер CPU для SQL Server:
-			select @AllCores_cnt=count(*) from sys.dm_os_schedulers where [status]='VISIBLE ONLINE';
-			--Максимум для MAXDOP = 64 ядра:
-			IF @AllCores_cnt>64
-				set @AllCores_cnt=64;
-			IF @MaxDop is not null
-			BEGIN
-				set @MaxDop_set=@MaxDop;
-				IF @AllCores_cnt<@MaxDop_set
-					set @MaxDop_set=@AllCores_cnt;
-			END
-		END
 
 		IF @TableFilter is not null
 			set @filter_old_hours=0;
@@ -132,25 +131,28 @@
 			set @TableFilter='';
 
 		--Формируем список исключений таблиц, индексы для этих таблиц не будут обслужены в текущем запуске.
-		select @StopList_str=StopList_str from sputnik.db_maintenance.StopLists where UniqueName=@UniqueName_SL;
+		select @StopList_str=StopList_str from db_maintenance.StopLists where UniqueName=@UniqueName_SL;
 		select @StopList_str=COALESCE(@StopList_str,'');
-	
+
 		--Заголовок запроса для обслуживания индексов!
-		set @tsql_handle= N'
-	SET DEADLOCK_PRIORITY '+CAST(@DeadLck_PR as varchar(2))+';
-	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
-	SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
+		set @tsql_handle= N'SET	xact_abort ON;
+SET DEADLOCK_PRIORITY '+CAST(@DeadLck_PR as varchar(2))+';
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as varchar(12))+';
 		';
 		--Заголовок запроса для логгирования:
-		set @tsql_handle_log='--dlck_pr='+CAST(@DeadLck_PR as varchar(2))+';tr_iso_lvl=1;lck_tmt='+CAST(@Lck_Timeout as varchar(12))+';
+		set @tsql_handle_log='--spid='+cast(@@spid as varchar(5))+';dlck_pr='+CAST(@DeadLck_PR as varchar(2))+';tr_iso_lvl=1;lck_tmt='+CAST(@Lck_Timeout as varchar(12))+';
 		';
 		--Далее получаем индексы для обслуживания и формируем команды для обслуживания, и выполняем их по очереди в отдельном пакете.
-		declare @SchemaName nvarchar(2000), @TableName nvarchar(2000), @IndexName nvarchar(2000), @PageCount int, @AVG_Fragm_percent tinyint,@NotRunOnline bit;
+		declare @SchemaName nvarchar(2000), @TableName nvarchar(2000), @IndexName nvarchar(2000), @PageCount int, @AVG_Fragm_percent tinyint,@NotRunOnline bit, @NoReorganize bit;
 		declare @command nvarchar(MAX), @check_set_online char(3), @PageU_prc tinyint, @i_cnt bigint=0,@i_cnt_skip bigint=0;
+		
+		set @check_set_online=case @Ed when 'Ent' then @set_online else 'OFF' end;
+		
 		--declare @T_i table (SchemaName nvarchar(300),TableName nvarchar(300),IndexName nvarchar(300), obj_id int, ind_id int, [PageCount] bigint,AVG_Fragm_percent tinyint,PageU_prc tinyint,NotRunOnline bit);
 		IF OBJECT_ID('tempdb.dbo.#T_RI') IS NOT NULL
 			DROP TABLE #T_RI;
-		CREATE TABLE #T_RI (DB nvarchar(2000),SchemaName nvarchar(2000),TableName nvarchar(2000),IndexName nvarchar(2000), obj_id int, ind_id int, [PageCount] bigint,AVG_Fragm_percent tinyint,PageU_prc tinyint,NotRunOnline bit, qt numeric(19,6));
+		CREATE TABLE #T_RI (DB nvarchar(2000),SchemaName nvarchar(2000),TableName nvarchar(2000),IndexName nvarchar(2000), obj_id int, ind_id int, [PageCount] bigint,AVG_Fragm_percent tinyint,PageU_prc tinyint,NotRunOnline bit, qt numeric(19,6), NoReorganize bit);
 
 
 		/*	Отбор БД для обслуживания */
@@ -190,50 +192,66 @@
 			and state_desc='ONLINE'
 			and database_id>4
 			and is_read_only=0
-			and (name NOT LIKE '201%(%)%' and name NOT LIKE 'S201%(%)%')
 			and adb.db is null;
 		OPEN DB;
 		FETCH NEXT FROM DB INTO @DB_current;
 		WHILE @@FETCH_STATUS=0
 		BEGIN
-			;with cte_src_1 as
-			(
-				select top (@rowlimit) 
-					SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline
-					,CAST( 
-							([AVG_Fragm_percent])
-							+ (100-[~PageUsed_perc])
-							+ (cast([PageCount] as numeric(19,6)) / case when MAX ([PageCount]) over ()=0 then 1 else MAX ([PageCount]) over () end * 10)
-							+ (datediff(day,LastRunDate,[LastUpdateStats])*[AVG_Fragm_percent]*0.01) 
-							- (cast([ReindexCount] as numeric(19,6)) / case when MAX (ReindexCount) over ()=0 then 1 else MAX (ReindexCount) over () end * 10)
-							as numeric(19,6)) as qt,
-					[TableID] as obj_id, [IndexID] as ind_id,
-					[~PageUsed_perc] as PageU_prc
-				from 
-					[db_maintenance].[ReindexData]
-				where 
-					DBName=QUOTENAME(@DB_current)
-					and (@TableFilter='' or TableName=QUOTENAME(@TableFilter))
-					and CHARINDEX(TableName+';',@StopList_str)=0
-					and ([LastUpdateStats] is not null or @fragm_tresh<0)
-					and ([PageCount] is not null and (@filter_pages_min is null or [PageCount] >= @filter_pages_min))
-					and ([PageCount] is not null and (@filter_pages_max is null or [PageCount] <= @filter_pages_max))
-					and (
-							(
-								(AVG_Fragm_percent is not null and (@filter_fragm_min is null or AVG_Fragm_percent >= @filter_fragm_min))
-								OR ([~PageUsed_perc]<@PageUsed_tresh AND AVG_Fragm_percent>0)
+			begin tran
+				;with cte_src_1 as
+				(
+					select top (@rowlimit) 
+						SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline
+						,CAST( 
+								([AVG_Fragm_percent])
+								+ (100-[~PageUsed_perc])
+								+ (cast([PageCount] as numeric(19,6)) / case when MAX ([PageCount]) over ()=0 then 1 else MAX ([PageCount]) over () end * 10)
+								+ (datediff(day,LastRunDate,[LastUpdateStats])*[AVG_Fragm_percent]*0.01) 
+								- (cast([ReindexCount] as numeric(19,6)) / case when MAX (ReindexCount) over ()=0 then 1 else MAX (ReindexCount) over () end * 10)
+								as numeric(19,6)) as qt,
+						[TableID] as obj_id, [IndexID] as ind_id,
+						[~PageUsed_perc] as PageU_prc,
+						[NoReorganize]
+					from 
+						[db_maintenance].[ReindexData]
+					where 
+						DBName=QUOTENAME(@DB_current)
+						and (@TableFilter='' or TableName=QUOTENAME(@TableFilter))
+						and CHARINDEX(TableName+';',@StopList_str)=0
+						and CHARINDEX(concat('schema=',SchemaName,';'),@StopList_str)=0	--exclude table by schema from stop list
+						and ([LastUpdateStats] is not null or @fragm_tresh<0)
+						and ([PageCount] is not null and (@filter_pages_min is null or [PageCount] >= @filter_pages_min))
+						and ([PageCount] is not null and (@filter_pages_max is null or [PageCount] <= @filter_pages_max))
+						and (
+								(
+									(AVG_Fragm_percent is not null and (@filter_fragm_min is null or AVG_Fragm_percent >= @filter_fragm_min))
+									OR ([~PageUsed_perc]<@PageUsed_tresh AND AVG_Fragm_percent>0)
+								)
+								AND (AVG_Fragm_percent is not null and (@filter_fragm_max is null or AVG_Fragm_percent <= @filter_fragm_max))				
 							)
-							AND (AVG_Fragm_percent is not null and (@filter_fragm_max is null or AVG_Fragm_percent <= @filter_fragm_max))				
-						)
-					and (LastRunDate is null or (@filter_old_hours is null or DATEDIFF(HOUR,[LastRunDate],getdate()) >= @filter_old_hours))
-					and (LastRunDate is null or (LastUpdateStats > LastRunDate) or @fragm_tresh<0)
-				order by qt desc
-			)
-			insert into #T_RI (DB, SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt)
-			select
-					@DB_current,SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt
-			from 
-				cte_src_1;
+						and (LastRunDate is null or (@filter_old_hours is null or DATEDIFF(HOUR,[LastRunDate],getdate()) >= @filter_old_hours))
+						and (LastRunDate is null or (LastUpdateStats > LastRunDate) or @fragm_tresh<0)
+						and datediff(hour,isnull(LastRunStartTime, '1900-01-01'),getdate())>=case when isnull(@filter_old_hours,0) < 1 then 1 else @filter_old_hours end
+					order by qt desc
+				)
+				insert into #T_RI (DB, SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt,[NoReorganize])
+				select
+						@DB_current,SchemaName,TableName,IndexName, obj_id, ind_id, [PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,qt,[NoReorganize]
+				from 
+					cte_src_1;
+				update [db_maintenance].[ReindexData]
+					set [LastRunStartTime] = getdate()
+				from (
+					select distinct [SchemaName], obj_id, ind_id
+					from #T_RI
+					where DB = @DB_current
+				)src
+				,[db_maintenance].[ReindexData] r
+				where r.DBName = QUOTENAME(@DB_current)
+					and r.[SchemaName] = src.SchemaName
+					and r.[TableID] = src.obj_id
+					and r.[IndexID] = src.ind_id;
+			commit
 		
 			FETCH NEXT FROM DB INTO @DB_current;
 		END
@@ -248,20 +266,20 @@
 		) ;
 
 		if @only_show=1
-			select SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline 
+			select SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline,[NoReorganize]
 			from
-			(select  top (@rowlimit) SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline from #T_RI order by [qt] desc) t
+			(select  top (@rowlimit) SchemaName,TableName,IndexName,[PageCount],AVG_Fragm_percent,NotRunOnline,[NoReorganize] from #T_RI order by [qt] desc) t
 			order by NEWID();
 		else
 		BEGIN
 
 			declare C cursor for
-			select DB, SchemaName,TableName,IndexName, obj_id, ind_id ,[PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline
+			select DB, SchemaName,TableName,IndexName, obj_id, ind_id ,[PageCount],AVG_Fragm_percent,PageU_prc,NotRunOnline,[NoReorganize]
 			from
-			(select  top (@rowlimit) DB, SchemaName,TableName,IndexName, obj_id, ind_id,  [PageCount],AVG_Fragm_percent, PageU_prc, NotRunOnline from #T_RI order by [qt] desc) t
+			(select  top (@rowlimit) DB, SchemaName,TableName,IndexName, obj_id, ind_id,  [PageCount],AVG_Fragm_percent, PageU_prc, NotRunOnline,[NoReorganize] from #T_RI order by [qt] desc) t
 			order by NEWID();
 			open C
-			fetch next from C into @DB_current, @SchemaName,  @TableName, @IndexName, @obj_id, @ind_id, @PageCount, @AVG_Fragm_percent,@PageU_prc,@NotRunOnline;
+			fetch next from C into @DB_current, @SchemaName,  @TableName, @IndexName, @obj_id, @ind_id, @PageCount, @AVG_Fragm_percent,@PageU_prc,@NotRunOnline,@NoReorganize;
 			while @@fetch_status=0
 			begin
 				--Проверяем TimeOut, если время вышло - пишем в лог HS и выходим!
@@ -272,7 +290,7 @@
 					BEGIN
 						set @commant_text_log='Достигнут TimeOut в usp_reindex_run. @TimeOut_sec='+cast(@TimeOut_sec as varchar(30))+'; @time_elapsed_sec='+cast(@time_elapsed_sec as varchar(30));
 						--Логгируем в историю Обслуживания БД:
-						EXEC sputnik.db_maintenance.usp_WriteHS 
+						EXEC db_maintenance.usp_WriteHS 
 							@DB_ID=@db_id_check,
 							@Command_Type=100, --100-TimeOut for Reindex (usp_reindex_run)
 							@Command_Text_1000=@commant_text_log,
@@ -294,64 +312,49 @@
 				if @PauseMirroring=1 and @MirrorState in ('SYNCHRONIZED','SYNCHRONIZING')
 					exec(N'alter database ['+@DB_current+'] set partner suspend');
 
-				--Только если Enterprise: Автоопределение @MaxDop (если не задан) - в зависимости от объема индекса!
-				IF @MaxDop IS NULL AND @Ed='Ent'
-				BEGIN
-					select @MaxDop_set=
-					CASE 
-						WHEN @PageCount<640 THEN 2		--5Мб
-						WHEN @PageCount<6400 THEN 4 	--50Мб
-						WHEN @PageCount<64000 THEN 8	--500Мб
-						WHEN @PageCount<640000 THEN 16	--5Гб
-						WHEN @PageCount<6400000 THEN 32	--50Гб
-						ELSE 64
-					END;
-					--Если ядер CPU мало, то сработает послабление:
-					select @MaxDop_set=
-					CASE 
-						WHEN @AllCores_cnt<=4 AND @MaxDop_set>1 THEN 1
-						WHEN @AllCores_cnt<=9 AND @MaxDop_set>2 THEN 2
-						WHEN @AllCores_cnt<=14 AND @MaxDop_set>3 THEN 3
-						WHEN @AllCores_cnt<=16 AND @MaxDop_set>4 THEN 4
-						WHEN @AllCores_cnt<=20  AND @MaxDop_set>5 THEN 5
-						ELSE @MaxDop_set
-					END;
-					IF @AllCores_cnt<=@MaxDop_set
-						set @MaxDop_set=@AllCores_cnt-1;
-				END;
+				if (isnull(@MaxDop,-1)<0)
+					exec @MaxDop_set = [db_maintenance].[usp_getMaxDop] @PageCount;
 
-				set @check_set_online=@set_online;
-				IF (@check_set_online='ON' and @NotRunOnline=1 and @policy_offline=1)
+				IF (@check_set_online='ON' and @NotRunOnline=1 and (@policy_offline=0 or (@policy_offline=2 and @NoReorganize=1)))
 				BEGIN
 					--Пропустить этот индекс
 					set @command_type=8;
-					set @commant_text_log='Этот индекс пропущен, т.к. @NotRunOnline=1 и @policy_offline=1';
+					set @commant_text_log=concat('This index was skipped because @NotRunOnline=',@NotRunOnline,'; @policy_offline=',@policy_offline,'; @NoReorganize=',@NoReorganize);
 					set @i_cnt_skip += 1;
 				END
 				ELSE BEGIN
 	
-					if @check_set_online='ON' and @NotRunOnline=1 and @policy_offline=0
-						set @check_set_online='OFF';	
-						
 					--rebuild делаем только если фрагментация меньше @fragm_tresh и если заполненость страницы более чем @PageUsed_tresh
 					--в остальных случаях нужен reorginize!
-					if (@AVG_Fragm_percent <= @fragm_tresh AND (@PageU_prc>=@PageUsed_tresh)) OR (@NotRunOnline=1 AND @check_set_online='ON' AND @policy_offline=2)
+					if (
+						(@AVG_Fragm_percent <= @fragm_tresh AND (@PageU_prc>=@PageUsed_tresh)) 
+						OR (@NotRunOnline=1 AND @check_set_online='ON' AND @policy_offline IN (2,3))
+					) and isnull(@NoReorganize,0)=0
 					begin
 						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' reorganize ';
 						set @command_type=2;
 					end
-					else if @AVG_Fragm_percent > @fragm_tresh OR (@PageU_prc<@PageUsed_tresh and @AVG_Fragm_percent>0)
+					else
 					begin
-						if @check_set_online='ON'
+						if @check_set_online='ON' and @NotRunOnline=1
+							set @check_set_online='OFF';	
+
+						if @check_set_online='ON' begin
 							set @command_type=1;
+							if isnull(@walp_max_duration,-1)>0
+								set @walp_option=' (WAIT_AT_LOW_PRIORITY (MAX_DURATION = '+cast(@walp_max_duration as varchar(5))+' minutes, ABORT_AFTER_WAIT = '+@walp_abort_after_wait+'))'
+						end
 						else
 							set @command_type=0;
-						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' rebuild with ( sort_in_tempdb = '+@set_sortintempdb+', online = '+@check_set_online+N' , data_compression = '+@set_compression+', fillfactor='+cast(@set_fillfactor as varchar(5))+CASE WHEN @Ed='Ent' THEN ', MAXDOP = '+cast(@MaxDop_set as varchar(5)) ELSE '' END+')';
+						set @command=N'alter index '+@IndexName+N' on '+@SchemaName+N'.'+@TableName+N' rebuild with ( sort_in_tempdb = '+@set_sortintempdb+', online = '+@check_set_online+@walp_option+N' , data_compression = '+@set_compression+', fillfactor='+cast(@set_fillfactor as varchar(5))+CASE WHEN @Ed='Ent' THEN ', MAXDOP = '+cast(@MaxDop_set as varchar(5)) ELSE '' END+')';
 
 					end
+					select @commandWithAppLock = resultCommand
+					from [db_maintenance].[uf_addAppLockCommand] (@DB_Current, @SchemaName, @TableName, @command, default);
+
 					set @tsql=@tsql_handle+N'
-		use '+QUOTENAME(@DB_current)+';
-		'			+@command;
+	use '+QUOTENAME(@DB_current)+';
+	'				+@commandWithAppLock;
 			
 					set @flag_fail=0;
 					set @StrErr=NULL;
@@ -386,7 +389,7 @@
 				END;
 		
 			--Логгируем в историю Обслуживания БД:
-				EXEC sputnik.db_maintenance.usp_WriteHS 
+				EXEC db_maintenance.usp_WriteHS 
 					@DB_ID=@db_id_check,
 					@Object_ID=@obj_id,
 					@Index_Stat_ID=@ind_id,
@@ -396,7 +399,7 @@
 					@tt_start=@tt_start,
 					@Status=@flag_fail, --0-Success, 1-Fail(Error)
 					@Error_Text_1000=@StrErr;
-				fetch next from C into @DB_current, @SchemaName,  @TableName, @IndexName, @obj_id, @ind_id, @PageCount, @AVG_Fragm_percent,@PageU_prc,@NotRunOnline;
+				fetch next from C into @DB_current, @SchemaName,  @TableName, @IndexName, @obj_id, @ind_id, @PageCount, @AVG_Fragm_percent,@PageU_prc,@NotRunOnline,@NoReorganize;
 			
 			end
 			close C;
@@ -418,7 +421,7 @@
 			END
 			+' . Параметры: @db_name='''+COALESCE(@db_name,'NULL')+''',@RowCount='+CONVERT(VARCHAR(10),@RowLimit);
 			--Логгируем в историю Обслуживания БД:
-			EXEC sputnik.db_maintenance.usp_WriteHS 
+			EXEC db_maintenance.usp_WriteHS 
 				@DB_ID=0,
 				@Command_Type=200, --200-TaskCompleted for Reindex (usp_reindex_run)
 				@Command_Text_1000=@commant_text_log,

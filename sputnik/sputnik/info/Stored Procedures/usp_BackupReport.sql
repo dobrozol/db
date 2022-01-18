@@ -2,12 +2,12 @@
 	/* =============================================
 	-- Author:		Андрей Иванов (sqland1c)
 	-- Create date: 29.11.2013 (1.0)
-	-- Description: Возвращает информацию о последних бэкапах (полный и лога) из БД sputnik.
+	-- Description: Возвращает информацию о последних бэкапах (полный и лога) из БД 
 	-- Update:
 					04.02.2014 (2.0)
 					Полностью переписан алгоритм процедуры. Теперь показывает все данные, имена файлов бэкапов локально и копии в сети, а также производится проверка файла через спец. процедуру.
 					Добавлен параметр @Backup_type, если задан, то отчёт будет только по указанному типу бэкапа.
-					Расширенные возможности! Добавлен параметр @xp, если задан 1, то Отчёт строится не по базе sputnik. А по всем базам через системные таблицы базы msdb! 
+					Расширенные возможности! Добавлен параметр @xp, если задан 1, то Отчёт строится не по базе  А по всем базам через системные таблицы базы msdb! 
 						При этом если будет задан тип бэкапа, тогда Отчёт будет построен только по созданным бэкапам указанного типа.
 					05.02.2014 (2.1)
 					Добавлен новый параметр @OnlyProblems. Если задан 1, то в Отчёт будут попадать только Проблемы ( файла бэкапа нет, или дата бэкапа очень старая)!
@@ -80,7 +80,7 @@
 	BEGIN
 		SET NOCOUNT ON;
 		declare @SQLServer nvarchar(510);
-		exec sputnik.info.usp_GetHostname @Servername=@SQLServer OUT;
+		exec info.usp_GetHostname @Servername=@SQLServer OUT;
 		if OBJECT_ID('tempdb..DB') IS NOT NULL
 			DROP TABLE #DB;
 		CREATE TABLE #DB (name nvarchar(800), [id] int, model nvarchar(800), BackupTypeNeed nvarchar(800));
@@ -156,7 +156,7 @@
 			BEGIN
 				DECLARE @TT TABLE ([DB_name] NVARCHAR(400), Backup_Type VARCHAR(4), BackupFile NVARCHAR(500), ID INT, BackupDate DATETIME2(2), LocalDir NVARCHAR(500), NetDir NVARCHAR(500), CheckLocalDir BIT, CheckNetDir BIT, CheckLocalFile BIT, CheckLocalFileOnly BIT, CheckNetFile BIT);
 				INSERT INTO @TT
-					EXEC sputnik.info.usp_GetLastBackups @DBName=@DBFilter, @Backup_type=@Backup_type, @CheckOnline=1;
+					EXEC info.usp_GetLastBackups @DBName=@DBFilter, @Backup_type=@Backup_type, @CheckOnline=1;
 
 				IF @xp=0
 					select DISTINCT 
@@ -224,7 +224,7 @@
 						DATEDIFF(second, AllBackups.backup_start_date, AllBackups.backup_finish_date) as backup_elapsed_sec
 					from #DB as Bases
 					LEFT JOIN @TT t ON Bases.name=t.[DB_name] AND (Bases.BackupTypeNeed=t.Backup_Type OR (t.Backup_Type='DIFF' AND Bases.BackupTypeNeed='FULL'))
-					LEFT JOIN [sputnik].[backups].[BackupHistory] AllBackups ON t.ID=AllBackups.ID
+					LEFT JOIN [backups].[BackupHistory] AllBackups ON t.ID=AllBackups.ID
 					WHERE (Bases.BackupTypeNeed=@Backup_type or @Backup_type is NULL) 
 			END
 		end
@@ -238,7 +238,7 @@
 				BackupTypeNeed,
 				Backups.BackupType as BackupTypeFact,
 				Backups.BackupDate, REPLACE(Backups.BackupFile,'.Only','.BAK') as BackupFile,
-				sputnik.info.uf_checkfile(REPLACE(Backups.BackupFile,'.Only','.BAK')) as CheckBackupFile,
+				info.uf_checkfile(REPLACE(Backups.BackupFile,'.Only','.BAK')) as CheckBackupFile,
 				DATEDIFF(minute,Backups.BackupDate,getdate()) as BackupAgeInMinutes,
 				CAST(Backups.backup_size_Mb/1024.000 as numeric(9,3)) AS backup_size_Gb
 			from
@@ -279,7 +279,7 @@
 			where
 				(@Backup_type is null or (Bases.BackupTypeNeed=@Backup_type))
 				AND (@DBFilter is null or Bases.name=@DBFilter)
-				AND (@OnlyProblems = 0 or sputnik.info.uf_checkfile(REPLACE(Backups.BackupFile,'.Only','.BAK')) <> 1 or ((Backups.BackupType='Log' and DATEDIFF(minute,Backups.BackupDate,getdate())>60) or (Backups.BackupType<>'Log' and DATEDIFF(minute,Backups.BackupDate,getdate())>1600)))
+				AND (@OnlyProblems = 0 or info.uf_checkfile(REPLACE(Backups.BackupFile,'.Only','.BAK')) <> 1 or ((Backups.BackupType='Log' and DATEDIFF(minute,Backups.BackupDate,getdate())>60) or (Backups.BackupType<>'Log' and DATEDIFF(minute,Backups.BackupDate,getdate())>1600)))
 
 		end;	
 	END

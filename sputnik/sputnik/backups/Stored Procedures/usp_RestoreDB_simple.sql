@@ -165,7 +165,7 @@ BEGIN
 				--Если путь к базе НЕ указан, определяем диск, где больше всего свободного места.
 				DECLARE @MaxDrive CHAR(1);
 				IF @FromLog IS NULL AND @DiffBack=0
-					exec sputnik.info.usp_GetDrives @GetMaxFree=1, @MaxFreeDrive=@MaxDrive OUTPUT;
+					exec info.usp_GetDrives @GetMaxFree=1, @MaxFreeDrive=@MaxDrive OUTPUT;
 				ELSE
 					SELECT TOP 1 @MaxDrive=LEFT(physical_name,1)
 					FROM SYS.MASTER_FILES
@@ -425,7 +425,7 @@ BEGIN
 		EXEC (@tsql);
 
 		--Сжатие файлов Логов принудительно для восстановленной БД до 128 Мб.:
-		EXEC sputnik.db_maintenance.usp_ShrinkLogFile 
+		EXEC db_maintenance.usp_ShrinkLogFile 
 				@db_name=@DBNameTarget, 
 				@SetSizeMb=128,
 				@FileGrowthMb=64

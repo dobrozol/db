@@ -56,7 +56,7 @@
 		declare @Kind varchar(4),@DBName nvarchar(400), @InstanceName nvarchar(128),@PSFile nvarchar(300),@ErrMsg nvarchar(900), @LocalPolicy tinyint, @NetPolicy tinyint, @PS_Filter_Policy nvarchar(4000);
 		declare C cursor for
 		select bc.LocalDir, bc.NetDir, bc.LocalDays, bc.NetDays, bc.DBName, bc.Kind, bc.[LocalPolicy], bc.[NetPolicy]
-		from sputnik.backups.BackConf bc
+		from backups.BackConf bc
 		inner join sys.databases sdb on bc.DBName=sdb.[name] and sdb.state_desc='ONLINE'
 		where
 			(@DBFilter is null or bc.DBName=@DBFilter)
@@ -64,7 +64,7 @@
 			and (bc.Kind in ('Full','Diff','Log')) --на всякий случай ограничение. Удалять только файлы полных копий, дифф. копий и Лога.
 		UNION
 		select bc.LocalDir, bc.NetDir, bc.LocalDays, bc.NetDays, bc.DBName, bc.Kind, bc.[LocalPolicy], bc.[NetPolicy]
-		from sputnik.backups.BackConfWeekly bc
+		from backups.BackConfWeekly bc
 		inner join sys.databases sdb on bc.DBName=sdb.[name] and sdb.state_desc='ONLINE'
 		where
 			(@DBFilter is null or bc.DBName=@DBFilter)

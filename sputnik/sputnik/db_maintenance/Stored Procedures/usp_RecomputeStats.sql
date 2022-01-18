@@ -51,6 +51,9 @@
 
 					08.02.2019	(2.165)
 					Изменены условия отбора. Теперь будут попадать статистики с незаполненными (NULL) значениями.
+
+					19.11.2021  (2.200)
+					added managed locks for multithreading, refactoring, fixing.
 	-- ============================================= */
 	CREATE PROCEDURE db_maintenance.usp_RecomputeStats
 		@DBName nvarchar(2000)=NULL,
@@ -81,14 +84,10 @@
 		DECLARE @tt_start datetime2(2), @StrErr NVARCHAR(MAX);
 		declare @tt_start_usp datetime2(2), @time_elapsed_sec int, @i_cnt bigint=0;
 		DECLARE @TSQL NVARCHAR(MAX),@obj_filter_str nvarchar(2000), @StopList_str NVARCHAR(MAX);
-		DECLARE @AllCores_cnt smallint;
 		set @tt_start_usp=CAST(SYSDATETIME() AS datetime2(2));
 		--Формируем список исключений таблиц, индексы для этих таблиц не будут обслужены в текущем запуске.
-		select @StopList_str=StopList_str from sputnik.db_maintenance.StopLists where UniqueName=@UniqueName_SL;
+		select @StopList_str=StopList_str from db_maintenance.StopLists where UniqueName=@UniqueName_SL;
 		select @StopList_str=COALESCE(@StopList_str,'');
-
-		--Определяем доступное кол-во ядер CPU для SQL Server:
-		select @AllCores_cnt=count(*) from sys.dm_os_schedulers where [status]='VISIBLE ONLINE';
 
 		IF OBJECT_ID('tempdb.dbo.#T_ST') IS NOT NULL
 			DROP TABLE #T_ST;
@@ -131,7 +130,6 @@
 			and state_desc='ONLINE'
 			and database_id>4
 			and is_read_only=0
-			and (name NOT LIKE '201%(%)%' and name NOT LIKE 'S201%(%)%')
 			and adb.db is null;
 		OPEN DB;
 		FETCH NEXT FROM DB INTO @DB_current;
@@ -225,113 +223,35 @@
 			DECLARE @commant_text_log NVARCHAR(MAX),@HandleCmd NVARCHAR(2000), @Cmd_handle_log NVARCHAR(MAX), @UpdCmd NVARCHAR(MAX), @shm_id int, @obj_id int, @stat_id int, @db_id int, @flag_fail bit;
 			DECLARE CST CURSOR FOR
 			SELECT TOP(@RowLimit)
-				N'SET DEADLOCK_PRIORITY '+CAST(@DeadLck_PR as nvarchar(5))+N';
-				SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
-				SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as nvarchar(25))+N';
-				USE ['+DB+N'];
-				' as Cmd_Handle,
+				N'SET xact_abort ON;
+SET DEADLOCK_PRIORITY '+CAST(@DeadLck_PR as nvarchar(5))+N';
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SET LOCK_TIMEOUT '+CAST(@Lck_Timeout as nvarchar(25))+N';
+USE ['+DB+N'];
+' as Cmd_Handle,
 				--Заголовок запроса для логгирования:
-				tsql_handle_log=N'--dlck_pr='+CAST(@DeadLck_PR as nvarchar(2))+N';tr_iso_lvl=1;lck_tmt='+CAST(@Lck_Timeout as nvarchar(12))+N';
-				',
-				N'UPDATE STATISTICS '+QUOTENAME(shm)+N'.'+QUOTENAME(obj)+N' '+QUOTENAME(stat)+N' '+
-				COALESCE(
-					--Сначало проверяем исключения по таблице и статистике:
-					COALESCE(db_maintenance.uf_CheckTabList_US(QUOTENAME(obj),QUOTENAME(stat)),@policy_scan),
-					CASE 
-						WHEN @AllCores_cnt>11 OR DataUsed_Mb<750 THEN 
-							CASE 
-								----Сначало проверяем исключения по таблице и статистике:
-								--WHEN db_maintenance.uf_CheckTabList_US(QUOTENAME(obj),QUOTENAME(stat)) IS NOT NULL THEN db_maintenance.uf_CheckTabList_US(QUOTENAME(obj),QUOTENAME(stat))  
-								WHEN DataUsed_Mb<=300 THEN N'WITH FULLSCAN;'
-								--WHEN row_count<1000000 THEN 'WITH FULLSCAN;'
-								WHEN DataUsed_Mb<=500 THEN N'WITH SAMPLE 90 PERCENT;'
-								--WHEN row_count<3000000 THEN 'WITH SAMPLE 90 PERCENT;'
-								WHEN DataUsed_Mb<=1024  THEN N'WITH SAMPLE 75 PERCENT;'
-								--WHEN row_count<5000000 THEN 'WITH SAMPLE 85 PERCENT;'
-								WHEN DataUsed_Mb<1500 THEN N'WITH SAMPLE 50 PERCENT;'
-								--WHEN row_count<10000000 THEN 'WITH SAMPLE 50 PERCENT;'
-								WHEN DataUsed_Mb<2048 THEN N'WITH SAMPLE 35 PERCENT;'
-								--WHEN row_count<15000000 THEN 'WITH SAMPLE 40 PERCENT;'
-								WHEN DataUsed_Mb<3000 THEN N'WITH SAMPLE 24 PERCENT;'
-								--WHEN row_count<20000000 THEN 'WITH SAMPLE 25 PERCENT;'
-								WHEN DataUsed_Mb<5000 THEN N'WITH SAMPLE 12 PERCENT;'
-								--WHEN row_count<30000000 THEN 'WITH SAMPLE 15 PERCENT;'
-								WHEN DataUsed_Mb<7000 THEN N'WITH SAMPLE 9 PERCENT;'
-								--WHEN row_count<50000000 THEN 'WITH SAMPLE 10 PERCENT;'
-								WHEN DataUsed_Mb<10100 THEN N'WITH SAMPLE 6 PERCENT;'
-								--WHEN row_count<75000000 THEN 'WITH SAMPLE 7 PERCENT;'
-								WHEN DataUsed_Mb<15100 THEN N'WITH SAMPLE 3 PERCENT;'
-								--WHEN row_count<100000000 THEN 'WITH SAMPLE 5 PERCENT;'
-								WHEN DataUsed_Mb<20100 THEN N'WITH SAMPLE 2 PERCENT;'
-								WHEN DataUsed_Mb<30100 THEN N'WITH SAMPLE 1 PERCENT;'
-								--WHEN row_count<200000000 THEN 'WITH SAMPLE 3 PERCENT;'
-								--WHEN row_count<300000000 THEN 'WITH SAMPLE 2 PERCENT;'
-								--WHEN row_count<500000000 THEN 'WITH SAMPLE 1 PERCENT;'
-								ELSE N'WITH SAMPLE 50000 ROWS'
-							END
-						WHEN (@AllCores_cnt>5 AND @AllCores_cnt<=11) OR DataUsed_Mb<1500  THEN
-							CASE 
-								----Сначало проверяем исключения по таблице и статистике:
-								--WHEN db_maintenance.uf_CheckTabList_US(QUOTENAME(obj),QUOTENAME(stat)) IS NOT NULL THEN db_maintenance.uf_CheckTabList_US(QUOTENAME(obj),QUOTENAME(stat))  
-								--WHEN row_count<500000 THEN 'WITH FULLSCAN;'
-								--WHEN row_count<1000000 THEN 'WITH SAMPLE 80 PERCENT;'
-								--WHEN row_count<2000000 THEN 'WITH SAMPLE 45 PERCENT;'
-								--WHEN row_count<3000000 THEN 'WITH SAMPLE 30 PERCENT;'
-								--WHEN row_count<5000000 THEN 'WITH SAMPLE 20 PERCENT;'
-								--WHEN row_count<7000000 THEN 'WITH SAMPLE 13 PERCENT;'
-								--WHEN row_count<10000000 THEN 'WITH SAMPLE 9 PERCENT;'
-								--WHEN row_count<15000000 THEN 'WITH SAMPLE 6 PERCENT;'
-								--WHEN row_count<20000000 THEN 'WITH SAMPLE 3 PERCENT;'
-								--WHEN row_count<40000000 THEN 'WITH SAMPLE 2 PERCENT;'
-								--WHEN row_count<75000000 THEN 'WITH SAMPLE 1 PERCENT;'
-								--ELSE 'WITH SAMPLE 700000 ROWS'
-								WHEN DataUsed_Mb<=151 THEN N'WITH FULLSCAN;'
-								WHEN DataUsed_Mb<=300 THEN N'WITH SAMPLE 90 PERCENT;'
-								WHEN DataUsed_Mb<=751  THEN N'WITH SAMPLE 75 PERCENT;'
-								WHEN DataUsed_Mb<1201 THEN N'WITH SAMPLE 50 PERCENT;'
-								WHEN DataUsed_Mb<1801 THEN N'WITH SAMPLE 35 PERCENT;'
-								WHEN DataUsed_Mb<2048 THEN N'WITH SAMPLE 24 PERCENT;'
-								WHEN DataUsed_Mb<3501 THEN N'WITH SAMPLE 12 PERCENT;'
-								WHEN DataUsed_Mb<5501 THEN N'WITH SAMPLE 9 PERCENT;'
-								WHEN DataUsed_Mb<7510 THEN N'WITH SAMPLE 6 PERCENT;'
-								WHEN DataUsed_Mb<10100 THEN N'WITH SAMPLE 3 PERCENT;'
-								WHEN DataUsed_Mb<15100 THEN N'WITH SAMPLE 2 PERCENT;'
-								WHEN DataUsed_Mb<20100 THEN N'WITH SAMPLE 1 PERCENT;'
-								ELSE N'WITH SAMPLE 25000 ROWS'
-							END
-						ELSE
-							CASE 
-								----Сначало проверяем исключения по таблице и статистике:
-								--WHEN db_maintenance.uf_CheckTabList_US(QUOTENAME(obj),QUOTENAME(stat)) IS NOT NULL THEN db_maintenance.uf_CheckTabList_US(QUOTENAME(obj),QUOTENAME(stat))  
-								--WHEN row_count<200000 THEN 'WITH FULLSCAN;'
-								--WHEN row_count<300000 THEN 'WITH SAMPLE 80 PERCENT;'
-								--WHEN row_count<500000 THEN 'WITH SAMPLE 50 PERCENT;'
-								--WHEN row_count<1000000 THEN 'WITH SAMPLE 30 PERCENT;'
-								--WHEN row_count<2000000 THEN 'WITH SAMPLE 15 PERCENT;'
-								--WHEN row_count<3000000 THEN 'WITH SAMPLE 10 PERCENT;'
-								--WHEN row_count<4000000 THEN 'WITH SAMPLE 8 PERCENT;'
-								--WHEN row_count<5000000 THEN 'WITH SAMPLE 6 PERCENT;'
-								--WHEN row_count<7000000 THEN 'WITH SAMPLE 3 PERCENT;'
-								--WHEN row_count<10000000 THEN 'WITH SAMPLE 2 PERCENT;'
-								--ELSE 'WITH SAMPLE 300000 ROWS'
-								WHEN DataUsed_Mb<=101 THEN N'WITH FULLSCAN;'
-								WHEN DataUsed_Mb<=200 THEN N'WITH SAMPLE 90 PERCENT;'
-								WHEN DataUsed_Mb<=551  THEN N'WITH SAMPLE 75 PERCENT;'
-								WHEN DataUsed_Mb<1001 THEN N'WITH SAMPLE 50 PERCENT;'
-								WHEN DataUsed_Mb<1501 THEN N'WITH SAMPLE 35 PERCENT;'
-								WHEN DataUsed_Mb<1751 THEN N'WITH SAMPLE 24 PERCENT;'
-								WHEN DataUsed_Mb<2501 THEN N'WITH SAMPLE 12 PERCENT;'
-								WHEN DataUsed_Mb<3501 THEN N'WITH SAMPLE 9 PERCENT;'
-								WHEN DataUsed_Mb<5510 THEN N'WITH SAMPLE 6 PERCENT;'
-								WHEN DataUsed_Mb<7800 THEN N'WITH SAMPLE 3 PERCENT;'
-								WHEN DataUsed_Mb<10100 THEN N'WITH SAMPLE 2 PERCENT;'
-								WHEN DataUsed_Mb<25100 THEN N'WITH SAMPLE 1 PERCENT;'
-								ELSE N'WITH SAMPLE 12000 ROWS'
-							END
-					END )
-				 as Cmd,
+				tsql_handle_log=N'--spid='+cast(@@spid as varchar(5))+';--dlck_pr='+CAST(@DeadLck_PR as nvarchar(2))+N';tr_iso_lvl=1;lck_tmt='+CAST(@Lck_Timeout as nvarchar(12))+N';
+',
+				c.resultCommand as Cmd,
 				obj_id, stat_id, DB_ID(DB)
 			FROM #T_ST
+			outer apply [db_maintenance].[uf_getRecomputePolicyScan](DataUsed_Mb) p
+			outer apply [db_maintenance].[uf_addAppLockCommand](
+				DB, shm, obj,
+				CONCAT('UPDATE STATISTICS ', QUOTENAME(shm), '.', QUOTENAME(obj), ' ', QUOTENAME(stat), ' ',
+					COALESCE(
+						--First: getting policy scan from exception table
+						db_maintenance.uf_CheckTabList_US(QUOTENAME(obj),QUOTENAME(stat)),
+						--Second: getting policy scan from config
+						@policy_scan,
+						--Third: getting policy scan based on the current size of the index
+						p.policyScan,
+						--And last: constant
+						N'WITH SAMPLE 100000 ROWS'
+					)
+				),
+				default
+			)c
 			ORDER BY mod_count DESC, perc_change DESC;
 		
 			OPEN CST;
@@ -346,7 +266,7 @@
 					BEGIN
 						set @commant_text_log=N'Достигнут TimeOut в usp_RecomputeStats. @TimeOut_sec='+cast(@TimeOut_sec as nvarchar(30))+N'; @time_elapsed_sec='+cast(@time_elapsed_sec as nvarchar(30));
 						--Логгируем в историю Обслуживания БД:
-						EXEC sputnik.db_maintenance.usp_WriteHS 
+						EXEC db_maintenance.usp_WriteHS 
 							@DB_ID=@db_id,
 							@Command_Type=101, --101-TimeOut for Update Statistics (usp_RecomputeStats)
 							@Command_Text_1000=@commant_text_log,
@@ -370,7 +290,7 @@
 				END CATCH
 				set @commant_text_log=@Cmd_handle_log+@UpdCmd;
 				--Логгируем в историю Обслуживания БД:
-				EXEC sputnik.db_maintenance.usp_WriteHS 
+				EXEC db_maintenance.usp_WriteHS 
 					@DB_ID=@db_id,
 					@Object_ID=@obj_id,
 					@Index_Stat_ID=@stat_id,
@@ -394,7 +314,7 @@
 		BEGIN
 			set @commant_text_log=N'Задача завершена: usp_RecomputeStats. Обработано объектов: '+CONVERT(NVARCHAR(10),@i_cnt)+N' . Параметры: @DBName='''+COALESCE(@DBName,'NULL')+N''',@RowCount='+CONVERT(nvarchar(20),@RowLimit);
 			--Логгируем в историю Обслуживания БД:
-			EXEC sputnik.db_maintenance.usp_WriteHS 
+			EXEC db_maintenance.usp_WriteHS 
 				@DB_ID=0,
 				@Command_Type=201, --201-TaskCompleted for Update Statistics (usp_RecomputeStats)
 				@Command_Text_1000=@commant_text_log,

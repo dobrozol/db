@@ -24,6 +24,7 @@
     <TargetDatabaseSet>True</TargetDatabaseSet>
     <DefaultCollation>SQL_Latin1_General_CP1_CI_AS</DefaultCollation>
     <Recovery>SIMPLE</Recovery>
+    <ValidateCasingOnIdentifiers>False</ValidateCasingOnIdentifiers>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <OutputPath>bin\Release\</OutputPath>
@@ -241,21 +242,17 @@
     <Build Include="info\Stored Procedures\usp_dbmail_DrivesFreeSpace.sql" />
     <Build Include="adt\Stored Procedures\usp_mail_eventdb.sql" />
     <Build Include="Security\zabbix.sql" />
+    <Build Include="db_maintenance\Stored Procedures\usp_getMaxDop.sql" />
+    <Build Include="db_maintenance\Functions\uf_getRecomputePolicyScan.sql" />
+    <Build Include="db_maintenance\Functions\uf_addAppLockCommand.sql" />
+    <Build Include="db_maintenance\Tables\ReindexReport.sql" />
+    <Build Include="db_maintenance\Stored Procedures\usp_saveReindexReport.sql" />
   </ItemGroup>
   <ItemGroup>
-    <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\130\SqlSchemas\master.dacpac">
-      <HintPath>C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\130\SqlSchemas\master.dacpac</HintPath>
-      <SuppressMissingDependenciesErrors>True</SuppressMissingDependenciesErrors>
-      <DatabaseVariableLiteralValue>master</DatabaseVariableLiteralValue>
-    </ArtifactReference>
     <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac">
       <HintPath>C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac</HintPath>
       <SuppressMissingDependenciesErrors>True</SuppressMissingDependenciesErrors>
       <DatabaseVariableLiteralValue>tempdb</DatabaseVariableLiteralValue>
-    </ArtifactReference>
-    <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac">
-      <HintPath>C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac</HintPath>
-      <DatabaseSqlCmdVariable>tempdb</DatabaseSqlCmdVariable>
     </ArtifactReference>
     <ArtifactReference Include="$(DacPacRootPath)\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SqlSchemas\msdb.dacpac">
       <HintPath>$(DacPacRootPath)\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SqlSchemas\msdb.dacpac</HintPath>

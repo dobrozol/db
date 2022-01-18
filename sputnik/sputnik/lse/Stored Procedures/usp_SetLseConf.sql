@@ -61,15 +61,15 @@
 				declare @res bit;
 				begin try
 					EXEC('
-								DELETE FROM ['+@ServerSource+'].sputnik.lse.SourceConfig
+								DELETE FROM ['+@ServerSource+'].lse.SourceConfig
 								WHERE ServerTarget='''+@ServerTarget+''' AND DBNameTarget='''+@DBNameTarget+''';
 								--Дополнительно почистим НЕАКТУАЛЬНЫЕ конфигурации:
-								DELETE FROM ['+@ServerSource+'].sputnik.lse.SourceConfig
+								DELETE FROM ['+@ServerSource+'].lse.SourceConfig
 								WHERE ServerTarget=(select [data_source] from ['+@ServerSource+'].master.sys.servers where is_linked=0);
-								DELETE FROM ['+@ServerSource+'].sputnik.lse.TargetConfig
+								DELETE FROM ['+@ServerSource+'].lse.TargetConfig
 								WHERE ServerSource=(select [data_source] from ['+@ServerSource+'].master.sys.servers where is_linked=0);
-								DELETE DelTab FROM ['+@ServerSource+'].sputnik.lse.HS DelTab
-								LEFT JOIN ['+@ServerSource+'].sputnik.lse.TargetConfig tc
+								DELETE DelTab FROM ['+@ServerSource+'].lse.HS DelTab
+								LEFT JOIN ['+@ServerSource+'].lse.TargetConfig tc
 								ON DelTab.config_id=tc.id
 								WHERE tc.id IS NULL;
 							');
@@ -104,31 +104,31 @@
 			END;
 			declare @t table (id smallint);
 			INSERT INTO @t (id)
-			SELECT id FROM sputnik.lse.TargetConfig WHERE DBNameTarget=@DBNameTarget
+			SELECT id FROM lse.TargetConfig WHERE DBNameTarget=@DBNameTarget
 			IF EXISTS(select id from @t)
 			BEGIN
 				begin try
 					IF @ReInit=1
 					begin
-						UPDATE sputnik.lse.TargetConfig
+						UPDATE lse.TargetConfig
 						SET InitDate=NULL, InitBackupHS_id=NULL, [Suspend]=0, UseFreshDiffBack=@UseFreshDiffBack
 						WHERE DBNameTarget=@DBNameTarget;
 						IF @CatalogFilesDB IS NOT NULL
-							UPDATE sputnik.lse.TargetConfig
+							UPDATE lse.TargetConfig
 							SET CatalogFilesDB=@CatalogFilesDB,
 								CatalogLogFiles=@CatalogLogFiles
 							WHERE DBNameTarget=@DBNameTarget;
 					end
 					IF @FromCopy IS NOT NULL
-						UPDATE sputnik.lse.TargetConfig
+						UPDATE lse.TargetConfig
 						SET FromCopy=@FromCopy
 						WHERE DBNameTarget=@DBNameTarget;
 					IF @Suspend IS NOT NULL
-						UPDATE sputnik.lse.TargetConfig
+						UPDATE lse.TargetConfig
 						SET [Suspend]=@Suspend
 						WHERE DBNameTarget=@DBNameTarget;	
 					IF @StandBy_File IS NOT NULL
-						UPDATE sputnik.lse.TargetConfig
+						UPDATE lse.TargetConfig
 						SET [StandBy_File]=@StandBy_File
 						WHERE DBNameTarget=@DBNameTarget;
 				end try
@@ -142,12 +142,12 @@
 			BEGIN
 				begin try
 					exec('
-							DELETE FROM ['+@ServerSource+'].sputnik.lse.SourceConfig
+							DELETE FROM ['+@ServerSource+'].lse.SourceConfig
 								WHERE ServerTarget='''+@ServerTarget+''' AND DBNameTarget='''+@DBNameTarget+''';
-							INSERT INTO ['+@ServerSource+'].sputnik.lse.SourceConfig (ServerTarget, DBNameSource, DBNameTarget)
+							INSERT INTO ['+@ServerSource+'].lse.SourceConfig (ServerTarget, DBNameSource, DBNameTarget)
 								VALUES ('''+@ServerTarget+''', '''+@DBNameSource+''' ,'''+@DBNameTarget+''');
 					');
-					INSERT INTO sputnik.lse.TargetConfig (ServerSource, DBNameSource, DBNameTarget, FromCopy, CatalogFilesDB, CatalogLogFiles, [StandBy_File], UseFreshDiffBack)
+					INSERT INTO lse.TargetConfig (ServerSource, DBNameSource, DBNameTarget, FromCopy, CatalogFilesDB, CatalogLogFiles, [StandBy_File], UseFreshDiffBack)
 					VALUES (@ServerSource, @DBNameSource,@DBNameTarget,@FromCopy, @CatalogFilesDB, @CatalogLogFiles, @StandBy_File, @UseFreshDiffBack);
 				end try
 				begin catch
