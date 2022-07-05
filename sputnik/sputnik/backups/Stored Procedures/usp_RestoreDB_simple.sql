@@ -90,6 +90,8 @@
 					Добавлена совместимость со старыми версиями SQL Server (<2012) в самом конце процедуры в алгоритме переопределения владельца БД.
 				26.11.2020 (1.962)
 					Added new column for FILELISTONLY (for compability with 2019)
+				14.04.2022 (1.970)
+					Added new parameter @FGPrimaryBack for partial restoring from backup of filegroup = primary
 -- ============================================= */
 CREATE PROCEDURE [backups].[usp_RestoreDB_simple]  
 	@DBNameTarget nvarchar(200),
@@ -110,7 +112,8 @@ CREATE PROCEDURE [backups].[usp_RestoreDB_simple]
 	@ContinueRecovery bit = 0,
 	@NoSetMultiUser bit=0,
 	@ChangeDBOwner bit = 0,
-	@del_bak_hs bit = 0
+	@del_bak_hs bit = 0,
+	@FGPrimaryBack bit = 0
 AS
 BEGIN
 	--Определяем мажорную версию SQL Server
@@ -362,27 +365,34 @@ BEGIN
 							set @MultiUserMode=' ALTER DATABASE ['+@DBNameTarget+'] SET MULTI_USER; ';
 					END	
 				END
+
+				declare	
+					 @FGPrimay varchar(100) = iif(@FGPrimaryBack=1, ' filegroup=''primary'' ', '')
+					,@PartialRestore varchar(100) = iif(@FGPrimaryBack=1, ', PARTIAL ', '');
+
 				if @FULLBACKUP=''
 				begin
 					IF @FromLog IS NULL
-						SET @RESTORE='DATABASE';
+						set @RESTORE='DATABASE'; 
 					ELSE
-						SET @RESTORE='LOG';
+						select @RESTORE='LOG',
+							@FGPrimay = '',
+							@PartialRestore = '';
 
 					set @tsql=@SingleUserMode+
-					'RESTORE ' +@RESTORE+ ' ['+@DBNameTarget+']
+					'RESTORE ' +@RESTORE+ ' ['+@DBNameTarget+']'+@FGPrimay+'
 						FROM  DISK = N'''+@LASTBACKUP+''' 
 					 WITH  FILE = 1, '+@tsql2+'
-					'+@RecoveryState+',NOUNLOAD,  REPLACE'+@StrStats+';'+
+					'+@RecoveryState+@PartialRestore+', NOUNLOAD,  REPLACE'+@StrStats+';'+
 					+@MultiUserMode;
 				end
 				else
 				begin
 					set @tsql=
-					'RESTORE DATABASE ['+@DBNameTarget+']
+					'RESTORE DATABASE ['+@DBNameTarget+']'+@FGPrimay+'
 						FROM  DISK = N'''+@FULLBACKUP+''' 
 					 WITH  FILE = 1, '+@tsql2+'
-					NORECOVERY, NOUNLOAD,  REPLACE'+@StrStats;
+					NORECOVERY, NOUNLOAD, REPLACE'+@PartialRestore+@StrStats;
 					--print (@tsql);
 					exec (@tsql);
 					set @tsql=

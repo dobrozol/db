@@ -67,6 +67,7 @@
 					22.12.2017 (2.020) Добавлена защита при формировании пути к бэкапу - в конце каталога должен быть символ "\".
 				
 					29.08.2019 (2.021) Добавлен новый параметр @debug - если он задан, то процедура ничего не делает, просто выводит все команды через PRINT для отладки.
+					20.01.2022 (2.030) Add NULL config supporting
 	-- ============================================= */
 	CREATE PROCEDURE [backups].[usp_RunBack] 
 		@DBNAME_in nvarchar(300)
@@ -95,50 +96,31 @@
 		--	Алгоритм такой: 1. ищем Full в Weekly. 2. Ищем Diff в Weekly. 3.Ищем Full в Daily 4. Ищем Diff в Daily	
 
 		SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG 
-		FROM backups.BackConfWeekly
-		WHERE Kind=@TypeBack and DBName=@DBNAME_in and MonthDay=@MonthDay;
+		FROM info.vGetAllBackConf
+		WHERE Kind=@TypeBack and isnull(DBName,'') in (@DBNAME_in, '')
+			and isnull([MonthDay],0) in (0, @MonthDay)
+			and isnull([WeekDay],0) in (0, @WeekDay)
+		order by pri, [MonthDay] desc, [WeekDay] desc;
 		if @DBName is null and @TypeBack='Full' and @OnlyFull=0
 			SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG  
-			FROM backups.BackConfWeekly
-			WHERE Kind='Diff' and DBName=@DBNAME_in and MonthDay=@MonthDay;
+			FROM info.vGetAllBackConf
+			WHERE Kind='Diff' and isnull(DBName,'') in (@DBNAME_in, '')
+				and isnull([MonthDay],0) in (0, @MonthDay)
+				and isnull([WeekDay],0) in (0, @WeekDay)
+			order by pri, [MonthDay] desc, [WeekDay] desc;
 
-		if @DBName is null
-		begin
-			SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG 
-			FROM backups.BackConfWeekly
-			WHERE Kind=@TypeBack and DBName=@DBNAME_in and WeekDay=@WeekDay;
-			if @DBName is null and @TypeBack='Full' and @OnlyFull=0
-				SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG  
-				FROM backups.BackConfWeekly
-				WHERE Kind='Diff' and DBName=@DBNAME_in and WeekDay=@WeekDay;
-		end
-		if @DBName is null
-		begin
-			SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG 
-			FROM backups.BackConf 
-			WHERE Kind=@TypeBack and DBName=@DBNAME_in
-			if @DBName is null and @TypeBack='Full' and @OnlyFull=0
-				SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind, @FG=FG  
-				FROM backups.BackConf
-				WHERE Kind='Diff' and DBName=@DBNAME_in;
-		end
 		--Новый алгоритм (только для полных бэкапов!): если использован параметр @OnlyFull и настройки бэкапов не были найдены
 		--тогда нужно найти подходящие настройки для Full из таблицы BackConfWeekly без учета дня месяца и дня недели!
-		if @DBName is null and @OnlyFull=1 and @TypeBack='Full'
+		if isnull(@DBName,'')='' and @OnlyFull=1 and @TypeBack='Full'
 		begin
-			DECLARE @T TABLE (DBName NVARCHAR(300), LocalDir NVARCHAR(500), NetDir NVARCHAR(500), LocalDays INT, NetDays INT, Kind VARCHAR(4), Ord tinyint);
-			INSERT INTO @T
-			SELECT TOP 1 DBName, LocalDir, NetDir, LocalDays, NetDays, Kind, 1 AS Ord
-			FROM backups.BackConfWeekly
-			WHERE Kind='Full' and DBName=@DBNAME_in and MonthDay BETWEEN 1 AND 31
-			UNION ALL
-			SELECT TOP 1 DBName, LocalDir, NetDir, LocalDays, NetDays, Kind, 2 AS Ord
-			FROM backups.BackConfWeekly
-			WHERE Kind='Full' and DBName=@DBNAME_in and WeekDay BETWEEN 1 AND 7;
-			SELECT @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind
-			FROM @T
-			WHERE Ord=(SELECT MIN(Ord) FROM @T);
-		end		
+			SELECT TOP 1 @DBName=DBName, @LocalDir=LocalDir, @NetDir=NetDir, @LocalDays=LocalDays, @NetDays=NetDays, @DynTypeBack=Kind
+			FROM info.vGetAllBackConf
+			WHERE Kind='Full' and isnull(DBName,'') in (@DBNAME_in, '') and (MonthDay BETWEEN 1 AND 31 or WeekDay BETWEEN 1 AND 7)
+			order by pri, [MonthDay] desc, [WeekDay] desc;
+		end
+
+		if @DBName = ''
+			select top 1 @DBName=[name] from sys.databases where [name] = @DBNAME_in
 
 		if @DBName is not null
 		begin
