@@ -44,6 +44,8 @@
 					Доработан поиск бэкапов для удаления по имени файла. 
 					19.04.2018 (2.028)
 					Добавлена проверка при отборе бэкапов - только для существующих online баз!
+					05.07.2022 (2.030)
+					added new rotation policy mode 3 by size of backup files in Gb
 	-- ============================================= */
 	create PROCEDURE backups.[usp_CleaningBack]  
 		@type varchar(4) =null --тип бэкапа Log или Full.
@@ -52,7 +54,7 @@
 	AS
 	BEGIN
 		SET NOCOUNT ON;
-		declare @PS_command nvarchar(4000), @CMD nvarchar(4000),@rc bit, @LocalDir nvarchar(1600), @NetDir nvarchar(1600), @LocalDays int, @NetDays int;
+		declare @PS_command nvarchar(4000), @CMD nvarchar(4000),@rc bit, @LocalDir nvarchar(1600), @NetDir nvarchar(1600), @LocalDays int, @NetDays int, @skipBackupFiles int;
 		declare @Kind varchar(4),@DBName nvarchar(400), @InstanceName nvarchar(128),@PSFile nvarchar(300),@ErrMsg nvarchar(900), @LocalPolicy tinyint, @NetPolicy tinyint, @PS_Filter_Policy nvarchar(4000);
 		declare C cursor for
 		select bc.LocalDir, bc.NetDir, bc.LocalDays, bc.NetDays, bc.DBName, bc.Kind, bc.[LocalPolicy], bc.[NetPolicy]
@@ -113,6 +115,13 @@
 				set @PS_Filter_Policy= N' ^^^| Sort-Object -property lastwritetime -descending ^^^| Select-Object -skip 3 ^^^| where {$_.lastwritetime -lt ((get-date).AddDays(-'+cast(@LocalDays as varchar(5))+N'))}';
 			else if @LocalPolicy=2 --Режим ротации гибридный (всегда оставляем x-файлов и удаляем по возрасту файлов старше x-дней )!
 				set @PS_Filter_Policy= N' ^^^| Sort-Object -property lastwritetime -descending ^^^| Select-Object -skip '+cast(@LocalDays as varchar(5))+' ^^^| where {$_.lastwritetime -lt ((get-date).AddDays(-'+cast(@LocalDays as varchar(5))+N'))}';
+			else if @LocalPolicy=3 --Rotation mode according to the specified file size + leave minimum files to ensure backups are saved!
+			begin
+				--get the number of backup files we are saving
+				select @skipBackupFiles = [info].[uf_getNumberBackupFilesByLimitSizeInGb] (@DBName, @Kind, @LocalDays, default, default, default)
+				
+				set @PS_Filter_Policy= N' ^^^| Sort-Object -property lastwritetime -descending ^^^| Select-Object -skip '+cast(@skipBackupFiles as varchar(5));
+			end
 			set @PS_command=N'get-childitem -path '''+@LocalDir+N''' ^^^| where {$_.extension -eq ''.'+@rez+N''' -and $_.Name -like '''+@DBName+'_'+@Kind+'_*''} '+@PS_Filter_Policy+N' ^^^| remove-item';
 			set @CMD = N'cmd /k chcp 1251 && echo | echo '+@PS_command+N' >> %temp%\'+@PSFile;
 			--для отладки:
@@ -130,6 +139,13 @@
 				set @PS_Filter_Policy= N' ^^^| Sort-Object -property lastwritetime -descending ^^^| Select-Object -skip 3 ^^^| where {$_.lastwritetime -lt ((get-date).AddDays(-'+cast(@NetDays as varchar(5))+N'))}';
 			else if @NetPolicy=2 --Режим ротации гибридный (всегда оставляем x-файлов и удаляем по возрасту файлов старше x-дней )!
 				set @PS_Filter_Policy= N' ^^^| Sort-Object -property lastwritetime -descending ^^^| Select-Object -skip '+cast(@NetDays as varchar(5))+' ^^^| where {$_.lastwritetime -lt ((get-date).AddDays(-'+cast(@NetDays as varchar(5))+N'))}';
+			else if @NetPolicy=3 --Rotation mode according to the specified file size + leave minimum files to ensure backups are saved!
+			begin
+				--get the number of backup files we are saving
+				select @skipBackupFiles = [info].[uf_getNumberBackupFilesByLimitSizeInGb] (@DBName, @Kind, @NetDays, default, default, default)
+				
+				set @PS_Filter_Policy= N' ^^^| Sort-Object -property lastwritetime -descending ^^^| Select-Object -skip '+cast(@skipBackupFiles as varchar(5));
+			end
 			set @PS_command=N'get-childitem -path '''+@NetDir+N''' ^^^| where {$_.extension -eq ''.'+@rez+N''' -and $_.Name -like '''+@DBName+'_'+@Kind+'_*''} '+@PS_Filter_Policy+N' ^^^| remove-item';
 			set @CMD = N'cmd /k chcp 1251 && echo | echo '+@PS_command+N' >> %temp%\'+@PSFile;
 			--для отладки:

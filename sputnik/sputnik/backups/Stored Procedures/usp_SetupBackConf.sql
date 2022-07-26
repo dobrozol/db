@@ -46,6 +46,8 @@
 					Обновления - добавлены параметры @LocalPolicy и @NetPolicy для установки политик ротаций в настройки бэкапов!
 				25.08.2016 (1.26)
 					Обновления - добавлена возможность установки бэкапов для системной базы model!
+				20.01.2022 (1.270) Add NULL config supporting
+
 	-- ============================================= */
 	CREATE PROCEDURE [backups].[usp_SetupBackConf] 
 		@DBNAME_in nvarchar(300) = null
@@ -92,8 +94,6 @@
 			set @LocalDir=@LocalDir+'\';
 		IF CHARINDEX('\',@NetDir,LEN(@NetDir)-1)=0
 			set @NetDir=@NetDir+'\';
-		IF @DBNAME_in = ''
-			set @DBNAME_in = NULL;
 		IF @LocalDaysWeek IS NULL 
 			SET @LocalDaysWeek=@LocalDays;
 		IF @NetDaysWeek IS NULL 
@@ -109,6 +109,10 @@
 					select name, @TypeBack as Kind from sys.databases
 					where (@DBNAME_in is null or name=@DBNAME_in) and (name not in ('tempdb')) and (state=0 and is_read_only=0)
 							and (recovery_model_desc<>'SIMPLE' or @TypeBack<>'Log')
+					union
+					select *
+					from (values('', @TypeBack)) v(name, Kind)
+					where @DBNAME_in = ''
 				)
 			MERGE backups.BackConf AS target
 			USING (	select 
@@ -132,6 +136,10 @@
 				(
 					select name, 'Full' as Kind from sys.databases
 					where (@DBNAME_in is null or name=@DBNAME_in) and (name not in ('tempdb')) and (state=0 and is_read_only=0)
+					union
+					select *
+					from (values('', 'Full')) v(name, Kind)
+					where @DBNAME_in = ''
 				)
 			MERGE backups.BackConfWeekly AS target
 			USING (	select 

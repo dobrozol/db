@@ -247,6 +247,9 @@
     <Build Include="db_maintenance\Functions\uf_addAppLockCommand.sql" />
     <Build Include="db_maintenance\Tables\ReindexReport.sql" />
     <Build Include="db_maintenance\Stored Procedures\usp_saveReindexReport.sql" />
+    <Build Include="info\Views\vGetNullBackConf.sql" />
+    <Build Include="info\Views\vAlwaysOnMon.sql" />
+    <Build Include="info\Functions\uf_getNumberBackupFilesByLimitSizeInGb.sql" />
   </ItemGroup>
   <ItemGroup>
     <ArtifactReference Include="C:\usr\vs2022\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\150\SQLSchemas\master.dacpac">

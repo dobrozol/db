@@ -65,6 +65,8 @@
 
 					23.02.2021 (1.593)
 					Fixed check: is it possible to make a backup on this server (AlwaysOn)
+
+					20.01.2022 (1.600) Add NULL config supporting
 	-- ============================================= */
 	CREATE proc [backups].[usp_StartBackup] 
 		@type varchar(4) = 'Full' --тип бэкапа Log или Full или Diff.
@@ -115,27 +117,28 @@
 		--Если делаем Log бэкапы, то проверяем что модель восстановления<>simple
 		declare BACKUPS scroll cursor
 		for 
-			select Conf.dbname
+			select distinct DBFact.dbname
 			from
 			(
-				select distinct DBName
+				select DBName
 				from info.vGetAllBackConf
 				where
-					(@DBFilter is null or DBName=@DBFilter)
-					and (@type is null or (Kind=@type) or (Kind in ('Full','Diff') and @type='Full'))
+					@type is null or (Kind=@type) or (Kind in ('Full','Diff') and @type='Full')
 			) Conf
 			inner join
 			(
-				select name as dbname
-				from sys.databases
+				select distinct [name] as dbname
+				from sys.databases d
+				inner join #x X
+					on d.name=X.DB
 				where 
-				state_desc='ONLINE' and is_in_standby=0 and is_read_only=0
-				and name <> 'tempdb'
-				and (@type<>'Log' OR recovery_model_desc<>'SIMPLE')
+					state_desc='ONLINE' and is_in_standby=0 and is_read_only=0
+					and name <> 'tempdb'
+					and (@type<>'Log' OR recovery_model_desc<>'SIMPLE')
 			) DBFact
-			inner join #x X
-				ON DBFact.dbname=X.DB
-			on Conf.dbname=DBFact.dbname
+				on Conf.dbname=DBFact.dbname or isnull(Conf.DBName,'')=''
+			where
+				(@DBFilter is null or DBFact.dbname=@DBFilter)
 	
 		--Определяем настройки многопоточности!
 		if @pp=0
