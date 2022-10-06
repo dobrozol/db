@@ -1,12 +1,17 @@
 ﻿
 /* =============================================
--- Author:		Андрей Иванов (sqland1c)
+-- Author:		Andrey N. Ivanov
 -- Create date: 25.04.2014
--- Description:	Эта функция получает наиболее подходящие настройки для Резервного копирования из БД 
-				В зависимости от Базы, типа бэкапа и текущей даты это значение может быть различным.
+-- Description:	This feature gets the most appropriate backup settings from the backup configuration.
+				Depending on the Base, backup type and current date, this value may differ.
 				
 -- Update:		31.07.2014 (1.1)
-				Добавлен алгоритм, который учитывает, что мог быть сделан Полный бэкап без учёта дня месяца и дня недели (это параметр @OnlyFull в ХП usp_RunBack).
+				Add algorithm that determines whether a Full backup was made without taking info about day of the month or day of the week 
+				(this is the @OnlyFull parameter in usp_RunBack hp).
+
+				06.10.2022 (1.20)
+				The algorithm for determining settings has been changed: the vGetAllBackConf view has been used. 
+				Also added support for NULL configuration backups.
 
 -- ============================================= */
 CREATE FUNCTION info.uf_GetBackConf
@@ -30,30 +35,19 @@ BEGIN
 	SET @MonthDay=DATEPART ( DAY , @DD );
 
 	INSERT INTO @T (LocalDir, NetDir, LocalDays, NetDays, Ord)
-	SELECT TOP 1 LocalDir, NetDir, LocalDays, NetDays, 1 as Ord
-	FROM backups.BackConfWeekly
-	WHERE Kind=@BT and DBName=@DB and MonthDay=@MonthDay
-	UNION ALL
-	SELECT TOP 1 LocalDir, NetDir, LocalDays, NetDays, 2 as Ord
-	FROM backups.BackConfWeekly
-	WHERE Kind=@BT and DBName=@DB and WeekDay=@WeekDay
-	UNION ALL
-	SELECT	TOP 1 LocalDir, NetDir, LocalDays, NetDays, 3 as Ord
-	FROM	backups.BackConf
-	WHERE	DBName = @DB AND Kind = @BT;
+	SELECT LocalDir, NetDir, LocalDays, NetDays, pri as Ord
+	FROM info.vGetAllBackConf
+	WHERE Kind=@BT and DBName in ('', @DB)
+		and isnull([MonthDay],0) in (0, @MonthDay)
+		and isnull([WeekDay],0) in (0, @WeekDay);
 
-	--Новый алгоритм (только для Полных бэкапов!): если использован параметр @OnlyFull в ХП usp_RunBack и стандартные настройки бэкапов не были найдены
-	--тогда нужно найти подходящие настройки для Full из таблицы BackConfWeekly без учета дня месяца и дня недели!
-	IF NOT EXISTS (SELECT LocalDir FROM  @T WHERE LocalDir IS NOT NULL) AND @BT='Full'
+	IF NOT EXISTS (SELECT LocalDir FROM @T WHERE LocalDir IS NOT NULL) AND @BT='Full'
 	BEGIN
 		INSERT INTO @T (LocalDir, NetDir, LocalDays, NetDays, Ord)
-		SELECT TOP 1 LocalDir, NetDir, LocalDays, NetDays, 1 AS Ord
-		FROM backups.BackConfWeekly
-		WHERE Kind='Full' and DBName=@DB and MonthDay BETWEEN 1 AND 31
-		UNION ALL
-		SELECT TOP 1 LocalDir, NetDir, LocalDays, NetDays, 2 AS Ord
-		FROM backups.BackConfWeekly
-		WHERE Kind='Full' and DBName=@DB and WeekDay BETWEEN 1 AND 7;
+		SELECT LocalDir, NetDir, LocalDays, NetDays, pri as Ord
+		FROM info.vGetAllBackConf
+		WHERE Kind='Full' and DBName in ('', @DB)
+			and (MonthDay BETWEEN 1 AND 31 or WeekDay BETWEEN 1 AND 7);
 	END;
 
 	INSERT @ReturnTable (LocalDir, NetDir, LocalDays, NetDays)
