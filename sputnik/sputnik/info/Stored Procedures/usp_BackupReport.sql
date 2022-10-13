@@ -2,74 +2,9 @@
 	/* =============================================
 	-- Author:		Андрей Иванов (sqland1c)
 	-- Create date: 29.11.2013 (1.0)
-	-- Description: Возвращает информацию о последних бэкапах (полный и лога) из БД 
+	-- Description: Returns information about the latest backups (full and log) from the database sputnik
 	-- Update:
-					04.02.2014 (2.0)
-					Полностью переписан алгоритм процедуры. Теперь показывает все данные, имена файлов бэкапов локально и копии в сети, а также производится проверка файла через спец. процедуру.
-					Добавлен параметр @Backup_type, если задан, то отчёт будет только по указанному типу бэкапа.
-					Расширенные возможности! Добавлен параметр @xp, если задан 1, то Отчёт строится не по базе  А по всем базам через системные таблицы базы msdb! 
-						При этом если будет задан тип бэкапа, тогда Отчёт будет построен только по созданным бэкапам указанного типа.
-					05.02.2014 (2.1)
-					Добавлен новый параметр @OnlyProblems. Если задан 1, то в Отчёт будут попадать только Проблемы ( файла бэкапа нет, или дата бэкапа очень старая)!
-					По умолчанию 0. Исправления в алгоритме отбора по виду бэкапа.
-					17.02.2014 (2.2)
-					Добавлен новый алгоритм для более точного определения информации при получении НЕрасширенного отчёта. Используется новая функция uf_GetWeekDay, которая
-					определяет день недели для Даты бэкапа. А также доработан алгоритм существования Копии файла (если путь для копии НЕ задан, то определяется существование
-					основного файла бэкапа). Кроме этого, доработан алгоритм получения Расширенного отчёта - теперь учитываются Дифф. бэкапы (на равне с полными).					18.02.2014 (2.21)
-					Добавлена проверка на состояние базы ReadOnly=0 при получении расширенного отчёта.
-					21.02.2014 (2.5)
-					Полностью изменён алгоритм получения НЕрасширенного отчета. Теперь используется CTE и один большой запрос разбит на два.
-					Всё это сделано, чтобы исправить задвоение в результатах (из-за использования таблицы Daily и Weekly).
-					27.05.2014 (2.51) 
-					Добавлено DISTINCT в запрос по базе sputnik (нерасширенный вариант). Чтобы исключить появление дубликатов 
-					в результатах (когда в таблице реально есть дубликаты).
-					10.07.2014 (2.55)
-					Добавлен новый параметр @DBFilter - позволяет получить отчёт только по указанной БД.
-					28.07.2014 (2.56)
-					Добавлено DISTINCT в расширенный отчёт. Чтобы исключить появление дубликатов.
-					30.07.2014 (2.7)
-					Полностью переделан алгоритм получения НЕрасширенного отчёта (по данным из БД sputnik). Теперь получение всей информации
-					происходит из новой ХП info.usp_GetLastBackups.
-					30.07.2014 (2.72)
-					Учтены входные параметры @DBFilter и @Backup_type при работе НЕрасширенного отчёта. При этом отбор происходит на самом
-					раннем этапе (при получении данных из ХП info.usp_GetLastBackups), что ускоряет выполнение всего отчёта
-					31.07.2014 (2.73)
-					Изменен алгоритм получения имени сервера для НЕрасширенного отчёта: теперь используется SERVERPROPERTY + явная конвертация в nvarchar.
-					31.07.2014 (2.74)
-					Внесено небольшое изменение: для работы отчета из 1С, нужно чтобы возвращаемые поля с датами были СТАРОГО ТИПА datetime!
-					17.11.2014 (2.75)
-					В расширенный отчёт добавлен дополнительный отбор для исключения временных баз Обмена 1СПегас!
-					20.11.2014 (2.76)
-					В вызов ХП usp_GetLastBackups добавлен новый параметр @CheckOnline - чтобы проверять только существующие БД (причём у которых 
-					состояние=Online и ReadOnly=False).
-					01.12.2015 (2.78)
-					SQLServer теперь формируется правильно из SERVERPROPERTY + учитывается именованный экземпляр.
-					Также внесён небольшой FIX в расширенный отчет - получение самого последнего имени файла в разрезе БД,типа бэкапа и даты бэкапа.
-					Чтобы исключить подобные задвоения.
-					11.01.2016 (2.80)
-					Расширены проверки и результаты при работе нерасширенного отчета!
-					24.05.2016 (2.85)
-					Добавлен новый режим @xp=2 - это нерасширенный отчет + дополнительные сведения по бэкапу (время выполнения, размер,
-					коэфициент сжатия). Для этого изменён тип параметра @xp - c bit на tinyint.
-					Также исправлено формирование имени сервера (теперь правильно учитывается имя сервера и имя экземпляра).
-					16.06.2016 (2.86)
-					Для режима @xp2 размер бэкапа возвращается теперь в Гб (ранее было в Мб).
-					24.08.2016 (2.90)
-					Доработан режим работы @xp2, теперь показывает полную информацию (в том числе теперь проверяется полный 
-					бэкап для базы model!).
-					29.09.2016 (2.92)
-					Добавлено новое исключение - для вторичных реплик AlwaysOn теперь не требуется Полный бэкап.
-					А для бэкапов Логов проверяем, что бэкапы должны выполняться на текущем сервере через
-					функцию: fn_hadr_backup_is_preferred_replica.
-					17.10.2016 (2.95)
-					Алгоритм процедуры изменён - теперь есть возможность работы на старых экземплярах SQL Server 2008(R2).
-					18.10.2016 (2.96)
-					Небольшое исправление - фильтр по @Backup_type не работал в режиме @xp=2.
-					24.11.2016 (2.963)
-					Для расширенного решима (@xp1) теперь также выводиться размер последнего бэкапа.
-					23.02.2018 (2.965)
-					Для определения правильного имени сервера SQL теперь 
-					используется процедура info.usp_getHostname	
+
 	-- ============================================= */
 	CREATE PROCEDURE info.usp_BackupReport
 		@Backup_type varchar(4) = null,
@@ -88,7 +23,7 @@
 			DROP TABLE #src_ag_db;
 		CREATE TABLE #src_ag_db (DB nvarchar(800), [db_id] int, [Role] nvarchar(800), [PartnerReplica] nvarchar(800), [PrimaryReplica] nvarchar(800), sync_state nvarchar(800), health nvarchar(800), DB_State nvarchar(800));
 		IF CAST (LEFT (CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(2)),2) AS SMALLINT) >= 11
-			--Информация о вторичных репликах AlwaysON AG на текущем сервере:
+			--detect AlwaysON AG secondary databases in this server:
 			INSERT INTO #src_ag_db (DB, [db_id], [Role], [PartnerReplica], [PrimaryReplica], sync_state, health, DB_State)
 				SELECT
 					DB_NAME(ag_db.database_id) as DB,
@@ -118,16 +53,15 @@
 			left join #src_ag_db as src_ag_db 
 				ON db.database_id=src_ag_db.[db_id]
 			where 
-				/*state_desc='ONLINE' and */is_read_only=0 and name not in ('tempdb'/*, 'model'*/)
-				AND (name NOT LIKE '201%(%)%' and name NOT LIKE 'S201%(%)%')
+				is_read_only=0 and name not in ('tempdb')
 				AND src_ag_db.[db_id] IS NULL 
 			UNION ALL
 			select 
 				name,database_id as id,recovery_model_desc as model,'Log' as BackupTypeNeed
 			from sys.databases
 			where 
-				/*state_desc='ONLINE' and */ is_read_only=0 and name not in ('tempdb', 'model')	and recovery_model_desc<>'SIMPLE'
-				AND (name NOT LIKE '201%(%)%' and name NOT LIKE 'S201%(%)%') 
+				is_read_only=0 and name not in ('tempdb', 'model')
+				and recovery_model_desc<>'SIMPLE'
 				AND (sys.fn_hadr_backup_is_preferred_replica(name)=1);
 		ELSE
 			INSERT INTO #DB(name,id,model,BackupTypeNeed)
@@ -137,17 +71,16 @@
 			left join #src_ag_db as src_ag_db 
 				ON db.database_id=src_ag_db.[db_id]
 			where 
-				/*state_desc='ONLINE' and */is_read_only=0 and name not in ('tempdb'/*, 'model'*/)
-				AND (name NOT LIKE '201%(%)%' and name NOT LIKE 'S201%(%)%')
+				is_read_only=0 and name not in ('tempdb')
 				AND src_ag_db.[db_id] IS NULL 
 			UNION ALL
 			select 
 				name,database_id as id,recovery_model_desc as model,'Log' as BackupTypeNeed
 			from sys.databases
 			where 
-				/*state_desc='ONLINE' and */ is_read_only=0 and name not in ('tempdb', 'model')	and recovery_model_desc<>'SIMPLE'
-				AND (name NOT LIKE '201%(%)%' and name NOT LIKE 'S201%(%)%')
-	
+				is_read_only=0 and name not in ('tempdb', 'model')
+				and recovery_model_desc<>'SIMPLE'
+				
 		--select * from #DB
 
 		if @xp in (0,2)
@@ -166,7 +99,7 @@
 						CAST(BackupDate AS datetime) as BackupDate, 
 						Backup_Type, 
 						CASE 
-							WHEN CheckLocalDir=0 THEN 'Каталог "'+LocalDir+'" НЕДОСТУПЕН!'
+							WHEN CheckLocalDir=0 THEN 'Directrory "'+LocalDir+'" is not available!'
 							WHEN CheckLocalFile=0 AND CheckLocalFileOnly=1 THEN LocalDir+REPLACE(BackupFile,'.BAK','.ONLY')
 							ELSE LocalDir+BackupFile 
 						END AS LocalFile,
@@ -175,9 +108,9 @@
 							ELSE CheckLocalFile
 						END AS CheckLocalFile,
 						CASE
-							WHEN NetDir is NULL OR NetDir='' OR LocalDir=NetDir THEN 'Копии бэкапа отключены'
-							WHEN CheckNetDir=0 THEN 'Каталог "'+NetDir+'" НЕДОСТУПЕН!'
-							WHEN CheckLocalFile=0 AND CheckLocalFileOnly=1 THEN 'Копия бэкапа НЕДОСТУПНА!'
+							WHEN NetDir is NULL OR NetDir='' OR LocalDir=NetDir THEN 'Сopying backups disabled'
+							WHEN CheckNetDir=0 THEN 'Directrory "'+NetDir+'" is not available!'
+							WHEN CheckLocalFile=0 AND CheckLocalFileOnly=1 THEN 'Copy of backup file is not available!'
 							ELSE NetDir+BackupFile
 						END AS NetFile,
 						case
@@ -198,8 +131,8 @@
 							ELSE t.Backup_Type
 						END as Backup_Type, 
 						CASE 
-							WHEN t.[DB_name] IS NULL THEN '!Бэкапы не настроены/нет первого бэкапа!'
-							WHEN t.CheckLocalDir=0 THEN 'Каталог "'+t.LocalDir+'" НЕДОСТУПЕН!'
+							WHEN t.[DB_name] IS NULL THEN 'Backup not configured!'
+							WHEN t.CheckLocalDir=0 THEN 'Directrory "'+t.LocalDir+'" is not available!'
 							WHEN t.CheckLocalFile=0 AND t.CheckLocalFileOnly=1 THEN t.LocalDir+REPLACE(t.BackupFile,'.BAK','.ONLY')
 							ELSE t.LocalDir+t.BackupFile 
 						END AS LocalFile,
@@ -209,16 +142,15 @@
 						END AS CheckLocalFile,
 						CASE
 							WHEN t.[DB_name] IS NULL THEN NULL
-							WHEN t.NetDir is NULL OR t.NetDir='' OR t.LocalDir=t.NetDir THEN 'Копии бэкапа отключены'
-							WHEN t.CheckNetDir=0 THEN 'Каталог "'+t.NetDir+'" НЕДОСТУПЕН!'
-							WHEN t.CheckLocalFile=0 AND t.CheckLocalFileOnly=1 THEN 'Копия бэкапа НЕДОСТУПНА!'
+							WHEN t.NetDir is NULL OR t.NetDir='' OR t.LocalDir=t.NetDir THEN 'Сopying backups disabled'
+							WHEN t.CheckNetDir=0 THEN 'Directrory "'+t.NetDir+'" is not available!'
+							WHEN t.CheckLocalFile=0 AND t.CheckLocalFileOnly=1 THEN 'Copy of backup file is not available!'
 							ELSE t.NetDir+t.BackupFile
 						END AS NetFile,
 						case
 							when t.NetDir is NULL OR t.NetDir='' OR t.LocalDir=t.NetDir then CheckLocalFile
 							else t.CheckNetFile
 						end as [CheckNetFile],
-						--DATEDIFF(minute,BackupDate,SYSDATETIME()) as BackupAgeInMinutes
 						CAST(AllBackups.backup_size_Mb/1024.000 as numeric(9,3)) AS backup_size_Gb,
 						AllBackups.backup_compress_ratio,
 						DATEDIFF(second, AllBackups.backup_start_date, AllBackups.backup_finish_date) as backup_elapsed_sec
@@ -229,7 +161,7 @@
 			END
 		end
 		else
-		--Расширенный мониторинг для всех баз (а не только тех, что прописаны в базе sputnik).
+		--Report backups for all databases (even if they are not configured in the sputnik database)
 		begin
 			select DISTINCT
 				@SQLServer as SQLServer, 
